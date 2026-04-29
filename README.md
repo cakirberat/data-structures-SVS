@@ -1,96 +1,72 @@
-# Veri Yapilari ile BSP Agaci Tabanli Gorus Alani ve Carpisma Tespiti
+<div align="center">
+  <h1>Veri Yapıları ile BSP Ağacı Tabanlı Görüş Alanı ve Çarpışma Tespiti</h1>
+  <p>
+    <b>C# ile geliştirilmiş 2D (top-down) gizlilik oyunu simülasyonu.</b>
+  </p>
+</div>
 
-Bu proje, PDF'teki **Proje Konu 6** gereksinimlerine uygun olarak C# ile gelistirilmis 2D (top-down) bir gizlilik oyunu simulasyonudur. Oyuncu engeller arasinda hedefe ulasmaya calisirken, dusman raycasting tabanli gorus sistemi ile oyuncuyu yakalamaya calisir.
+<br />
 
-## Proje Amaci
+Bu projede oyuncu engeller arasında hedefe ulaşmaya çalışırken, düşman raycasting tabanlı görüş sistemi ile oyuncuyu yakalamaya çalışır.
 
-- Oyun haritasini uygun veri yapilariyla modellemek
-- Gorus cizgisi ve gorus konisi hesaplamalarini verimli yapmak
-- Duvar carpisma kontrolunu guvenilir sekilde yapmak
-- Dusman hareketi icin A* tabanli yol bulma kullanmak
+## 🎯 Proje Amacı
 
-##  Faz 1 - Zorunlu Veri Yapilari
+- Oyun haritasını uygun veri yapılarıyla modellemek.
+- Görüş çizgisi ve görüş konisi hesaplamalarını verimli yapmak.
+- Duvar çarpışma kontrolünü güvenilir şekilde gerçekleştirmek.
+- Düşman hareketi için **A*** tabanlı yol bulma (pathfinding) algoritmasını kullanmak.
 
-Bu projede asagidaki veri yapilari sifirdan implemente edilmistir:
+---
 
-- `BSP Tree` (`BspTree`, `BspNode`): Duvar segmentlerini uzamsal olarak boler, gorus/carpisma sorgularinda adaylari daraltir.
-- `Graph` (`WaypointGraph`): Yurune bilir noktalar arasi baglantilari tutar.
-- `Min-Heap` (`MinHeap<T>`): A* acik kumesinde en dusuk maliyetli dugumu secer.
-- `Dynamic Array` (`DynamicArray<T>`): Duvarlar, isin sonuclari ve komsuluk listeleri icin kullanilir.
+## 🏗️ Faz 1 - Zorunlu Veri Yapıları
 
-##  Faz 2 - Zorunlu Algoritmalar
+Bu projede aşağıdaki veri yapıları sıfırdan implemente edilmiştir:
 
-- `Line of Sight`: Dusman ve oyuncu arasinda duvar kesisi var mi kontrol edilir.
-- `Raycasting / Intersection`: Dusmanin FOV konisindeki isinlarin duvarlarla kesisim noktasi hesaplanir.
-- `A* Pathfinding`: Dusmanin engelleri dolasarak hedefe ulasmasi icin kullanilir.
+- **`BSP Tree`** (`BspTree`, `BspNode`): Duvar segmentlerini uzamsal olarak böler, görüş/çarpışma sorgularında adayları daraltır.
+- **`Graph`** (`WaypointGraph`): Yürünebilir noktalar arası bağlantıları tutar.
+- **`Min-Heap`** (`MinHeap<T>`): A* açık kümesinde en düşük maliyetli düğümü seçer.
+- **`Dynamic Array`** (`DynamicArray<T>`): Duvarlar, ışın sonuçları ve komşuluk listeleri için kullanılır.
 
-##  Faz 3 - Arayuz Gereksinimleri
+---
 
-Proje, WinForms tabanli 2D bir arayuz ile gelistirilmistir:
+## 🧠 Faz 2 - Zorunlu Algoritmalar
 
-- Kusbakisi harita cizimi
-- Duvarlarin ve yurune bilir graph'in gosterimi
-- Dusman gorus konisi (ray + dolgulu fan) gosterimi
-- Oyuncu/dusman hareketi ve durum paneli
-- Canli metrik paneli (ray sayisi, path suresi, frame suresi)
+- **`Line of Sight (Görüş Çizgisi)`**: Düşman ve oyuncu arasında duvar kesişimi var mı kontrol edilir.
+- **`Raycasting / Intersection`**: Düşmanın FOV (Görüş Alanı) konisindeki ışınların duvarlarla kesişim noktası hesaplanır.
+- **`A* Pathfinding`**: Düşmanın engelleri dolaşarak hedefe ulaşması için kullanılır.
 
-## Oyun Davranisi
+---
 
-- Oyuncu `W`, `A`, `S`, `D` ile hareket eder.
-- Oyuncu duvarlardan gecemez (segment kesisim tabanli carpisma kontrolu).
-- Dusman devriye modunda rotalar arasinda gezer.
-- Oyuncu gorus konisine ve LOS'e girerse dusman takip moduna gecer.
-- Oyuncu hedefe ulasirsa kazanir; gorulurse yakalanir.
-- `R` tusu oyunu sifirlar.
+## 🖥️ Faz 3 - Arayüz Gereksinimleri
 
-## Dosya Yapisi
+Proje, WinForms tabanlı 2D bir arayüz ile geliştirilmiştir:
 
-- `New Proje/StealthVisionSystem/Program.cs`: Uygulama girisi, harita ve graph kurulumlari
-- `New Proje/StealthVisionSystem/CoreTypes.cs`: Temel tipler (`Vector2`, `WallSegment`, `RayHit`, `Enemy`)
-- `New Proje/StealthVisionSystem/DataStructures.cs`: `DynamicArray<T>`, `MinHeap<T>`
-- `New Proje/StealthVisionSystem/SpatialAlgorithms.cs`: BSP, LOS, raycasting, collision, geometri
-- `New Proje/StealthVisionSystem/Pathfinding.cs`: `WaypointGraph`, `AStarPathfinder`
-- `New Proje/StealthVisionSystem/GameForm.cs`: Arayuz, cizim, oyun dongusu ve AI modlari
+- 🗺️ Kuşbakışı harita çizimi
+- 🧱 Duvarların ve yürünebilir graph'ın gösterimi
+- 🔦 Düşman görüş konisi (ışın + dolgulu fan) gösterimi
+- 🏃‍♂️ Oyuncu/düşman hareketi ve durum paneli
+- 📊 Canlı metrik paneli (ışın sayısı, path süresi, frame süresi)
 
-## Kurulum ve Calistirma
+---
 
-### Gereksinimler
+## 🎮 Oyun Davranışı
 
-- .NET 9 SDK
-- Visual Studio 2022 (tercihen .NET desktop development workload ile)
+- **Hareket:** Oyuncu `W`, `A`, `S`, `D` tuşları ile hareket eder.
+- **Çarpışma:** Oyuncu duvarlardan geçemez (segment kesişim tabanlı çarpışma kontrolü).
+- **Yapay Zeka:** Düşman devriye modunda önceden belirlenmiş rotalar arasında gezer.
+- **Takip:** Oyuncu, düşmanın görüş konisine ve LOS'e (Görüş Çizgisi) girerse düşman **takip moduna** geçer.
+- **Kazanma/Kaybetme:** Oyuncu hedefe ulaşırsa kazanır; düşman tarafından görülürse yakalanır.
+- **Sıfırlama:** `R` tuşu oyunu sıfırlar.
 
-### Terminal ile
+---
 
-```bash
-cd "New Proje/StealthVisionSystem"
-dotnet restore
-dotnet run
-```
+## 📂 Dosya Yapısı
 
-### Visual Studio 2022 ile
-
-1. `StealthVisionSystem.csproj` dosyasini ac
-2. `StealthVisionSystem` icin `Set as Startup Project` yap
-3. `Ctrl + F5` ile calistir
-
-## Zaman Karmasikligi Ozeti
-
-- `BSP Query`: Ortalama durumda tum duvarlari gezmeden aday duvar listesini cikarir
-- `Raycasting`: `R` isin icin yaklasik `O(R * C)` (`C`: BSP'den gelen aday duvar sayisi)
-- `A*`: Graph uzerinde standart olarak `O((V + E) log V)` (heap kullanimina bagli)
-- `Collision`: Segment kesisim kontrolleri ile aday duvarlar uzerinden calisir
-
-## Ekip Bilgileri
-
-- **Oguz Eren** - 032290038
-- **Zeynep Sude Kalkan** - 032290056
-- **Baris Kabacaoglu** - 032290027
-- **Berat Cakir** - 032290054
-
-## Ekip Icindeki Modul Dagilimi
-
-- Oguz Eren: `GameForm.cs` (arayuz, oyun dongusu, panel)
-- Zeynep Sude Kalkan: `SpatialAlgorithms.cs` (BSP, LOS, raycasting, carpisma)
-- Baris Kabacaoglu: `Pathfinding.cs` (graph ve A* pathfinding)
-- Berat Cakir: `Program.cs`, `CoreTypes.cs`, `DataStructures.cs` (cekirdek ve veri yapilari)
-
+```text
+📁 New Proje/StealthVisionSystem/
+├── 📄 Program.cs           # Uygulama girişi, harita ve graph kurulumları
+├── 📄 CoreTypes.cs         # Temel tipler (Vector2, WallSegment, RayHit, Enemy)
+├── 📄 DataStructures.cs    # DynamicArray<T>, MinHeap<T>
+├── 📄 SpatialAlgorithms.cs # BSP, LOS, raycasting, collision, geometri
+├── 📄 Pathfinding.cs       # WaypointGraph, AStarPathfinder
+└── 📄 GameForm.cs          # Arayüz, çizim, oyun döngüsü ve AI modları
