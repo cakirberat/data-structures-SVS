@@ -129,7 +129,7 @@ public static class Visibility
         return new RayHit(found, bestDistance, bestPoint);
     }
 }
-
+///
 public static class Collision
 {
     public static bool CollidesWithWalls(Vector2 start, Vector2 end, BspTree bsp)
