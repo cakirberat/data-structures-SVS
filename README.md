@@ -55,45 +55,51 @@ Proje, WinForms tabanlı 2D bir arayüz ile geliştirilmiştir:
 ## 🚀 Kurulum ve Çalıştırma
 
 ### 🛠️ Gereksinimler
+
 - .NET 9 SDK
 - Visual Studio 2022 (tercihen .NET desktop development workload ile)
 
 ### 💻 Terminal ile
+
 bash
-cd "New Proje/StealthVisionSystem"
-dotnet restore
-dotnet run
+- cd "New Proje/StealthVisionSystem"
+- dotnet restore
+- dotnet run
 
-🛠️ Visual Studio 2022 ile
-StealthVisionSystem.csproj dosyasını aç.
+### 🛠️ Visual Studio 2022 ile
 
-StealthVisionSystem için Set as Startup Project yap.
+- StealthVisionSystem.csproj dosyasını aç.
 
-Ctrl + F5 ile çalıştır.
+- StealthVisionSystem için Set as Startup Project yap.
 
-⏳ Zaman Karmaşıklığı Özeti
-BSP Query: Ortalama durumda tüm duvarları gezmeden aday duvar listesini çıkarır.
+- Ctrl + F5 ile çalıştır.
 
-Raycasting: R ışın için yaklaşık O(R * C) (C: BSP'den gelen aday duvar sayısı).
+### ⏳ Zaman Karmaşıklığı Özeti
 
-A*: Graph üzerinde standart olarak O((V + E) log V) (heap kullanımına bağlı).
+- BSP Query: Ortalama durumda tüm duvarları gezmeden aday duvar listesini çıkarır.
 
-Collision: Segment kesişim kontrolleri ile aday duvarlar üzerinden çalışır.
+- Raycasting: R ışın için yaklaşık O(R * C) (C: BSP'den gelen aday duvar sayısı).
 
-👥 Ekip Bilgileri
-Oğuz Eren - 032290038
+- A*: Graph üzerinde standart olarak O((V + E) log V) (heap kullanımına bağlı).
 
-Zeynep Sude Kalkan - 032290056
+- Collision: Segment kesişim kontrolleri ile aday duvarlar üzerinden çalışır.
 
-Barış Kabacaoğlu - 032290027
+### 👥 Ekip Bilgileri
 
-Berat Çakır - 032290054
+- Oğuz Eren - 032290038
 
-🛠️ Ekip İçindeki Modül Dağılımı
-Oğuz Eren: GameForm.cs (arayüz, oyun döngüsü, panel)
+- Zeynep Sude Kalkan - 032290056
 
-Zeynep Sude Kalkan: SpatialAlgorithms.cs (BSP, LOS, raycasting, çarpışma)
+- Barış Kabacaoğlu - 032290027
 
-Barış Kabacaoğlu: Pathfinding.cs (graph ve A* pathfinding)
+- Berat Çakır - 032290054
 
-Berat Çakır: Program.cs, CoreTypes.cs, DataStructures.cs (çekirdek ve veri yapıları)
+### 🛠️ Ekip İçindeki Modül Dağılımı
+
+- Oğuz Eren: GameForm.cs (arayüz, oyun döngüsü, panel)
+
+- Zeynep Sude Kalkan: SpatialAlgorithms.cs (BSP, LOS, raycasting, çarpışma)
+
+- Barış Kabacaoğlu: Pathfinding.cs (graph ve A* pathfinding)
+
+- Berat Çakır: Program.cs, CoreTypes.cs, DataStructures.cs (çekirdek ve veri yapıları)
