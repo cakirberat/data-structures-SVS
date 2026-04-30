@@ -1,6 +1,6 @@
 # 🎮 Veri Yapıları ile BSP Ağacı Tabanlı Görüş Alanı ve Çarpışma Tespiti
 
-Bu proje, PDF'teki **Proje Konu 6** gereksinimlerine uygun olarak C# ile geliştirilmiş 2D (top-down) bir gizlilik oyunu simülasyonudur. Oyuncu engeller arasında hedefe ulaşmaya çalışırken, düşman raycasting tabanlı görüş sistemi ile oyuncuyu yakalamaya çalışır.
+Bu proje, C# ile geliştirilmiş 2D (top-down) bir gizlilik oyunu simülasyonudur. Oyuncu engeller arasında hedefe ulaşmaya çalışırken, düşman raycasting tabanlı görüş sistemi ile oyuncuyu yakalamaya çalışır.
 
 ## 🎯 Proje Amacı
 
@@ -94,7 +94,7 @@ bash
 
 - **Berat Çakır - 032290054**
 
-### 🛠️ Ekip İçindeki Modül Dağılımı
+## 🛠️ Ekip İçindeki Modül Dağılımı
 
 - **Oğuz Eren:** GameForm.cs (arayüz, oyun döngüsü, panel)
 
