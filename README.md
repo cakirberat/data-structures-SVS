@@ -62,7 +62,7 @@ Proje, WinForms tabanlı 2D bir arayüz ile geliştirilmiştir:
 ### 💻 Terminal ile
 
 bash
-- `cd "New Proje/StealthVisionSystem"`
+- `cd "data-structures-SVS-master"`
 - `dotnet restore`
 - `dotnet run`
 
