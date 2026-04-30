@@ -62,44 +62,44 @@ Proje, WinForms tabanlı 2D bir arayüz ile geliştirilmiştir:
 ### 💻 Terminal ile
 
 bash
-- cd "New Proje/StealthVisionSystem"
-- dotnet restore
-- dotnet run
+- `cd "New Proje/StealthVisionSystem"`
+- `dotnet restore`
+- `dotnet run`
 
 ### 🛠️ Visual Studio 2022 ile
 
-- StealthVisionSystem.csproj dosyasını aç.
+- `StealthVisionSystem.csproj` dosyasını aç.
 
 - StealthVisionSystem için Set as Startup Project yap.
 
 - Ctrl + F5 ile çalıştır.
 
-### ⏳ Zaman Karmaşıklığı Özeti
+## ⏳ Zaman Karmaşıklığı Özeti
 
-- BSP Query: Ortalama durumda tüm duvarları gezmeden aday duvar listesini çıkarır.
+- **BSP Query:** Ortalama durumda tüm duvarları gezmeden aday duvar listesini çıkarır.
 
-- Raycasting: R ışın için yaklaşık O(R * C) (C: BSP'den gelen aday duvar sayısı).
+- **Raycasting:** R ışın için yaklaşık O(R * C) (C: BSP'den gelen aday duvar sayısı).
 
-- A*: Graph üzerinde standart olarak O((V + E) log V) (heap kullanımına bağlı).
+- **A*:** Graph üzerinde standart olarak O((V + E) log V) (heap kullanımına bağlı).
 
-- Collision: Segment kesişim kontrolleri ile aday duvarlar üzerinden çalışır.
+- **Collision:** Segment kesişim kontrolleri ile aday duvarlar üzerinden çalışır.
 
-### 👥 Ekip Bilgileri
+## 👥 Ekip Bilgileri
 
-- Oğuz Eren - 032290038
+- **Oğuz Eren - 032290038**
 
-- Zeynep Sude Kalkan - 032290056
+- **Zeynep Sude Kalkan - 032290056**
 
-- Barış Kabacaoğlu - 032290027
+- **Barış Kabacaoğlu - 032290027**
 
-- Berat Çakır - 032290054
+- **Berat Çakır - 032290054**
 
 ### 🛠️ Ekip İçindeki Modül Dağılımı
 
-- Oğuz Eren: GameForm.cs (arayüz, oyun döngüsü, panel)
+- **Oğuz Eren:** GameForm.cs (arayüz, oyun döngüsü, panel)
 
-- Zeynep Sude Kalkan: SpatialAlgorithms.cs (BSP, LOS, raycasting, çarpışma)
+- **Zeynep Sude Kalkan:** SpatialAlgorithms.cs (BSP, LOS, raycasting, çarpışma)
 
-- Barış Kabacaoğlu: Pathfinding.cs (graph ve A* pathfinding)
+- **Barış Kabacaoğlu:** Pathfinding.cs (graph ve A* pathfinding)
 
-- Berat Çakır: Program.cs, CoreTypes.cs, DataStructures.cs (çekirdek ve veri yapıları)
+- **Berat Çakır:** Program.cs, CoreTypes.cs, DataStructures.cs (çekirdek ve veri yapıları)
