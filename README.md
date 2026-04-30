@@ -59,7 +59,7 @@ Proje, WinForms tabanlı 2D bir arayüz ile geliştirilmiştir:
 - Visual Studio 2022 (tercihen .NET desktop development workload ile)
 
 ### 💻 Terminal ile
-```bash
+bash
 cd "New Proje/StealthVisionSystem"
 dotnet restore
 dotnet run
