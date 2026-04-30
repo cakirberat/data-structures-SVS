@@ -1,0 +1,14 @@
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\bin\Debug\net9.0\StealthVisionSystem.exe
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\bin\Debug\net9.0\StealthVisionSystem.deps.json
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\bin\Debug\net9.0\StealthVisionSystem.runtimeconfig.json
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\bin\Debug\net9.0\StealthVisionSystem.dll
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\bin\Debug\net9.0\StealthVisionSystem.pdb
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.AssemblyInfoInputs.cache
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.AssemblyInfo.cs
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.csproj.CoreCompileInputs.cache
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.dll
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\refint\StealthVisionSystem.dll
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.pdb
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\StealthVisionSystem.genruntimeconfig.cache
+C:\Users\brt_c\OneDrive\Masaüstü\data-structures-main\New Proje\StealthVisionSystem\obj\Debug\net9.0\ref\StealthVisionSystem.dll
