@@ -1,501 +1,859 @@
-using System;
+﻿using System;
 using System.Drawing;
-using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using System.Collections.Generic;
 
-namespace StealthVisionSystem;
-
-public sealed class GameForm : Form
+namespace DataStructures_SVS
 {
-    private const float WorldScale = 60f;
-    private const float MapWidth = 16f * WorldScale;
-    private const float MapHeight = 10f * WorldScale;
-    private const float SidebarGap = 20f;
+    public enum GameState { Playing, Won, Lost, LevelComplete }
 
-    private readonly DynamicArray<WallSegment> _walls;
-    private readonly BspTree _bsp;
-    private readonly WaypointGraph _graph;
-    private readonly System.Windows.Forms.Timer _timer;
-    private readonly int[][] _patrolRoutes =
-    [
-        [0, 1, 2, 5, 4, 3],
-        [3, 4, 5, 2, 1, 0],
-        [0, 3, 4, 5, 2, 1]
-    ];
-
-    private Vector2 _player = new(14, 2);
-    private readonly Vector2 _goal = new(2.2, 8.4);
-    private Enemy _enemy = new(new Vector2(2, 2), 0.0, Math.PI / 2, 12.0);
-    private DynamicArray<int> _path = new();
-    private DynamicArray<RayHit> _fov = new();
-    private bool _canSeePlayer;
-    private int _patrolTargetIndex = 1;
-    private int _frameMs;
-    private int _pathMs;
-    private GameState _state = GameState.Playing;
-    private int _stuckFrames;
-    private EnemyMode _enemyMode = EnemyMode.Patrol;
-    private int _lostSightFrames;
-    private int _currentPatrolRoute;
-
-    public GameForm()
+    public class EnemyData
     {
-        Text = "BSP + FOV + A* Gorsel Simulasyon";
-        Width = 1360;
-        Height = 840;
-        DoubleBuffered = true;
-        KeyPreview = true;
-        StartPosition = FormStartPosition.CenterScreen;
+        public Vector2D Position;
+        public float Angle;
+        public List<Vector2D> CurrentPath = new List<Vector2D>();
+        public List<Vector2D> PatrolRoute = new List<Vector2D>();
+        public int PatrolIndex;
+        public int PathUpdateCounter;
+        public int StuckFrames;
+        public float LastX;
+        public float LastY;
+        public int ZoneIndex;
+        public int IdleFramesLeft;      // hedefe varinca bekle
+        public bool AlertFlash;         // gorunce uyari
+        public int AlertFlashFrames;
+        public Color ThemeColor;
+        public DynamicArray<Vector2D> FovPolygon = new DynamicArray<Vector2D>();
 
-        _walls = Program.BuildWalls();
-        _bsp = new BspTree(_walls);
-        _graph = Program.BuildWaypointGraph(_walls);
-
-        _timer = new System.Windows.Forms.Timer { Interval = 45 };
-        _timer.Tick += (_, _) =>
+        public EnemyData(Vector2D startPos, Color color, float startAngle, int zoneIndex)
         {
-            UpdateEnemy();
-            Recalculate();
+            Position = startPos.Clone();
+            ThemeColor = color;
+            Angle = startAngle;
+            ZoneIndex = zoneIndex;
+            LastX = startPos.X;
+            LastY = startPos.Y;
+        }
+
+        public Vector2D GetPatrolTarget()
+        {
+            if (PatrolRoute.Count == 0) return Position.Clone();
+            if (PatrolIndex >= PatrolRoute.Count) PatrolIndex = 0;
+            return PatrolRoute[PatrolIndex];
+        }
+    }
+
+    public partial class GameForm : Form
+    {
+        private Timer gameLoopTimer;
+
+        private Vector2D player;
+        private Vector2D targetExit;
+        private DynamicArray<Segment> walls;
+        private List<Vector2D> waypoints;
+        private List<EnemyData> enemies;
+
+        private BspTree bspTree;
+        private AStarPathfinder pathfinder;
+        private LevelNavigationGraph navGraph;
+
+        private GameState currentState;
+        private int currentLevelIndex;
+        private string levelName;
+        private string levelDescription;
+
+        private bool moveUp, moveDown, moveLeft, moveRight;
+
+        private float playerSpeed = 4f;
+        private float enemySpeed = 2.5f;
+        private float entityRadius = 10f;
+        private float fovRadius = 250f;
+        private float fovHalfAngle = 30f;
+        private int fovRayCount = 68;
+
+        private const int HudBarHeight = 60;           // daha ince HUD, haritaya alan kalsin
+        private const int PathUpdateInterval = 12;
+        private const float PatrolArrivalDist = 28f;
+        private const float PathClearanceRadius = 10f;
+        private const float RoutePointSep = 80f;       // rota noktaları arası min mesafe (düşürüldü)
+        private const int StuckFrameLimit = 60;        // takılma eşiği: 1 sn (eski 30 çok erken replan yapıyordu)
+        private const int StuckSkipLimit = 120;        // 2 sn sonra patrol index'i atla
+        private const int EnemyMoveSubSteps = 4;
+        private const int IdleFrames = 50;
+        private const int AlertFlashDuration = 20;
+
+        private float mapRenderScale = 1f;
+        private float exitPulse = 0f;
+        private float _playerMoveAngle = 0f;        // oyuncu hareket yonu (derece)
+
+        // Font/Brush onbellegi (her kare yeni nesne yaratmayi onler)
+        private Font _hudFont;
+        private Font _titleFont;
+        private Font _bigFont;
+        private Font _alertFont;
+
+        public GameForm()
+        {
+            DoubleBuffered = true;
+            Text = "DataStructures_SVS - BSP Gorus ve Cokusma";
+            BackColor = Color.FromArgb(25, 25, 30);
+            StartPosition = FormStartPosition.CenterScreen;
+
+            // Ekranin kullanilabilir alanina gore boyutu dinamik sec
+            // (taskbar, DPI scaling ve farkli cozunurluklerle uyumlu)
+            Rectangle work = Screen.PrimaryScreen.WorkingArea;
+            int formW = Math.Min(1280, work.Width);
+            int formH = Math.Min(880, work.Height - 8); // 8: pencere cercevesi payi
+            ClientSize = new Size(formW, formH);
+
+            _hudFont   = new Font("Segoe UI", 10f);
+            _titleFont = new Font("Segoe UI", 11f, FontStyle.Bold);
+            _bigFont   = new Font("Arial", 22f, FontStyle.Bold);
+            _alertFont = new Font("Arial", 14f, FontStyle.Bold);
+
+            pathfinder = new AStarPathfinder();
+            currentLevelIndex = 0;
+            LoadLevel(currentLevelIndex);
+
+            gameLoopTimer = new Timer();
+            gameLoopTimer.Interval = 16;
+            gameLoopTimer.Tick += GameLoopTick;
+            gameLoopTimer.Start();
+
+            KeyDown += GameForm_KeyDown;
+            KeyUp += GameForm_KeyUp;
+        }
+
+        private void LoadLevel(int levelIndex)
+        {
+            currentLevelIndex = levelIndex;
+            LevelDefinition level = LevelManager.GetLevel(levelIndex);
+
+            currentState = GameState.Playing;
+            levelName = level.Name;
+            levelDescription = level.Description;
+
+            // Seviyeye gore artan zorluk
+            switch (levelIndex)
+            {
+                case 0: enemySpeed = 2.3f; fovHalfAngle = 28f; fovRadius = 240f; break;
+                case 1: enemySpeed = 2.8f; fovHalfAngle = 33f; fovRadius = 265f; break;
+                case 2: enemySpeed = 3.3f; fovHalfAngle = 38f; fovRadius = 290f; break;
+                default: enemySpeed = 2.5f; fovHalfAngle = 30f; fovRadius = 250f; break;
+            }
+
+            player = level.PlayerStart.Clone();
+            targetExit = level.Exit.Clone();
+
+            walls = level.Walls;
+            waypoints = new List<Vector2D>(level.Waypoints);
+
+            bspTree = new BspTree();
+            bspTree.Build(walls);
+
+            navGraph = new LevelNavigationGraph();
+            navGraph.Build(waypoints, walls, bspTree, PatrolSystem.GraphPathRadius);
+
+            enemies = new List<EnemyData>();
+            var reservedWaypointIds = new HashSet<int>();
+            var priorRoutes = new List<List<Vector2D>>();
+            int enemyCount = level.EnemySpawns.Count;
+
+            for (int i = 0; i < enemyCount; i++)
+            {
+                EnemySpawn spawn = level.EnemySpawns[i];
+                var enemy = new EnemyData(spawn.Position, spawn.Color, spawn.StartAngle, i);
+
+                // Seviye tanımında PatrolPoints belirtilmişse sabit rota kullan;
+                // yoksa dinamik BuildPatrolRoute hesapla (fallback).
+                if (spawn.PatrolPoints != null && spawn.PatrolPoints.Count >= 2)
+                {
+                    enemy.PatrolRoute = new List<Vector2D>();
+                    foreach (Vector2D pt in spawn.PatrolPoints)
+                        enemy.PatrolRoute.Add(pt.Clone());
+                }
+                else
+                {
+                    enemy.PatrolRoute = BuildPatrolRoute(spawn.Position, reservedWaypointIds, priorRoutes, i, enemyCount);
+                }
+
+                enemy.PatrolIndex = 0;
+                enemy.Angle = spawn.StartAngle;
+                enemy.IdleFramesLeft = 0;
+                enemies.Add(enemy);
+                priorRoutes.Add(enemy.PatrolRoute);
+            }
+
+            moveUp = moveDown = moveLeft = moveRight = false;
+        }
+
+        // ─── Devriye rota olusturucu (yeniden yazildi) ───────────────────────────
+        //
+        // Strateji:
+        //  1. Rezerveli ve gecersiz (duvar icindeki) waypoint'leri ele.
+        //  2. Kalan noktaları "bu dusmana yakin mi diger rotalara" kriteri ile
+        //     ikiye böl: tercihli (uzak) ve geri kalan (yakin).
+        //  3. Her iki havuzdan secim yap; harita merkezine gore aciya gore
+        //     sirala → duzgün bir devre elde et.
+        //  4. A* navigasyonu arasi mesafeyi halleder; rota olusturmada
+        //     PathClearForEntity kontrolü KALDIRILIYOR (cok katiydi, havuzu bosaltiyordu).
+        //
+        private List<Vector2D> BuildPatrolRoute(Vector2D spawnPos, HashSet<int> reservedIds,
+            List<List<Vector2D>> priorRoutes, int enemyIndex, int totalEnemies)
+        {
+            // Adim 1: Kullanilabilir waypoint'leri topla
+            var farPool  = new List<int>(); // diger rotalardan uzak
+            var nearPool = new List<int>(); // diger rotalara yakin ama yine de geçerli
+
+            for (int i = 0; i < waypoints.Count; i++)
+            {
+                if (reservedIds.Contains(i)) continue;
+                if (!Geometry.IsPositionFree(waypoints[i], PathClearanceRadius, walls)) continue;
+
+                bool tooClose = false;
+                for (int r = 0; r < priorRoutes.Count; r++)
+                    for (int p = 0; p < priorRoutes[r].Count; p++)
+                        if (Vector2D.Distance(waypoints[i], priorRoutes[r][p]) < RoutePointSep)
+                        { tooClose = true; break; }
+
+                if (!tooClose) farPool.Add(i);
+                else           nearPool.Add(i);
+            }
+
+            // Adim 1b: spawn'a cok yakin waypointleri preferred pool'dan cikar
+            // (ilk rota noktasi spawn'in hemen yaninda olmamali)
+            const float MinSpawnDist = 140f;
+            var farPoolFiltered  = new List<int>();
+            var nearPoolFiltered = new List<int>();
+            foreach (int i in farPool)
+                (Vector2D.Distance(waypoints[i], spawnPos) >= MinSpawnDist ? farPoolFiltered : nearPoolFiltered).Add(i);
+            foreach (int i in nearPool)
+                nearPoolFiltered.Add(i);
+            // Eger uzak havuz yeterliyse onu kullan, degilse tum havuz
+            if (farPoolFiltered.Count >= 2) { farPool = farPoolFiltered; }
+
+            // Adim 2: Dusmanın sektöründeki noktaları önceliklendir
+            float sectorSize  = 360f / Math.Max(1, totalEnemies);
+            float sectorStart = enemyIndex * sectorSize;
+
+            List<int> pool = farPool.Count >= 3 ? farPool
+                           : (farPool.Count > 0 ? farPool : nearPool);
+
+            if (pool.Count == 0)
+            {
+                // Son care: rezerve edilmis tum noktalar; sadece spawn'i dondur
+                return new List<Vector2D> { spawnPos.Clone() };
+            }
+
+            // Adim 3: Sektor icindekiler once, geri kalanlar sonra – max 12 aday
+            var sectorPool   = new List<int>();
+            var outsidePool  = new List<int>();
+            Vector2D mapCtr  = new Vector2D(
+                (LevelManager.MapLeft + LevelManager.MapRight)  * 0.5f,
+                (LevelManager.MapTop  + LevelManager.MapBottom) * 0.5f);
+
+            for (int a = 0; a < pool.Count; a++)
+            {
+                int i = pool[a];
+                float ang = (float)(Math.Atan2(waypoints[i].Y - spawnPos.Y,
+                                               waypoints[i].X - spawnPos.X) * (180.0 / Math.PI));
+                float rel = ((ang % 360f + 360f) % 360f - sectorStart + 360f) % 360f;
+                if (rel < sectorSize) sectorPool.Add(i);
+                else                  outsidePool.Add(i);
+            }
+
+            // Sektor yetersizse disaridan takviye yap
+            var candidates = new List<int>(sectorPool);
+            if (candidates.Count < 4)
+                foreach (int x in outsidePool) { candidates.Add(x); if (candidates.Count >= 12) break; }
+            else if (candidates.Count > 12)
+                candidates.RemoveRange(12, candidates.Count - 12);
+
+            // Adim 4: Aciya gore sirala → devriye devri düzgün olsun
+            candidates.Sort((a, b) =>
+            {
+                float angA = (float)(Math.Atan2(waypoints[a].Y - mapCtr.Y,
+                                                waypoints[a].X - mapCtr.X) * (180.0 / Math.PI));
+                float angB = (float)(Math.Atan2(waypoints[b].Y - mapCtr.Y,
+                                                waypoints[b].X - mapCtr.X) * (180.0 / Math.PI));
+                return angA.CompareTo(angB);
+            });
+
+            // Adim 5: Esit aralikli secim (max 5 nokta)
+            int want  = Math.Min(5, candidates.Count);
+            int step  = Math.Max(1, candidates.Count / want);
+            var route = new List<Vector2D>();
+
+            for (int ci = 0; ci < candidates.Count && route.Count < want; ci += step)
+            {
+                int idx = candidates[ci];
+                reservedIds.Add(idx);
+                route.Add(waypoints[idx].Clone());
+            }
+
+            // Adim 6: Dogrulama – A* ile ulaşilamayan rota noktalarini cikar
+            // (kapalı odalar veya keskin koseler nedeniyle erisim engeli olabilir)
+            var validRoute = new List<Vector2D>();
+            Vector2D checkFrom = spawnPos;
+            foreach (Vector2D pt in route)
+            {
+                var testPath = pathfinder.FindPathToPosition(navGraph, checkFrom, pt, walls, bspTree);
+                if (testPath.Count > 0 || Geometry.PathClearForEntity(checkFrom, pt, PathClearanceRadius, bspTree, walls))
+                {
+                    validRoute.Add(pt);
+                    checkFrom = pt;
+                }
+                // Ulasilamazsa bu noktayi atla; sonraki noktaya dogrudan gidilir
+            }
+            if (validRoute.Count > 0) route = validRoute;
+
+            // NOT: spawnPos rotaya EKLENMEZ.
+            // Eklenseydi: enemy frame-1'de "zaten orada" tespiti yapip idle'a girerdi.
+            // Bunun yerine enemy hemen ilk waypoint'e hareket eder.
+            if (route.Count == 0)
+            {
+                // Hicbir waypoint bulunamadi – spawn yakini fallback
+                route.Add(spawnPos.Clone());
+                float ox = spawnPos.X + (mapCtr.X - spawnPos.X) * 0.4f;
+                float oy = spawnPos.Y + (mapCtr.Y - spawnPos.Y) * 0.4f;
+                route.Add(new Vector2D(ox, oy));
+            }
+
+            // Tek nokta korumasi
+            if (route.Count == 1)
+            {
+                float ox = route[0].X + (mapCtr.X - route[0].X) * 0.5f;
+                float oy = route[0].Y + (mapCtr.Y - route[0].Y) * 0.5f;
+                var opp = new Vector2D(ox, oy);
+                if (Geometry.IsPositionFree(opp, PathClearanceRadius, walls))
+                    route.Add(opp);
+                else
+                    route.Add(mapCtr.Clone());
+            }
+
+            // Tek sayili dusmanlar ters yonde devriye atar
+            if (enemyIndex % 2 == 1 && route.Count > 1)
+                route.Reverse();
+
+            return route;
+        }
+
+        // Gittigi yone bak: A* yolundaki sonraki dugum veya devriye hedefi.
+        // Idle sirasinda: yava yava donme (etraf gozetleme efekti).
+        private void UpdateEnemyLookDirection(EnemyData enemy)
+        {
+            if (enemy.IdleFramesLeft > 0)
+            {
+                // Idle: her kare 2 derece don (360/180 kare ≈ 3 sn tam tur)
+                // Her dusman kendi index'ine gore farkli hizda / yonde doner
+                float dir = (enemy.ZoneIndex % 2 == 0) ? 1f : -1f;
+                enemy.Angle += dir * 2.2f;
+                if (enemy.Angle >  180f) enemy.Angle -= 360f;
+                if (enemy.Angle < -180f) enemy.Angle += 360f;
+                return;
+            }
+
+            Vector2D lookAt;
+            if (enemy.CurrentPath != null && enemy.CurrentPath.Count > 0)
+                lookAt = enemy.CurrentPath[0];
+            else
+                lookAt = enemy.GetPatrolTarget();
+
+            float dx = lookAt.X - enemy.Position.X;
+            float dy = lookAt.Y - enemy.Position.Y;
+
+            if (dx * dx + dy * dy > 1f)
+                enemy.Angle = (float)(Math.Atan2(dy, dx) * (180.0 / Math.PI));
+        }
+
+        private void GameLoopTick(object sender, EventArgs e)
+        {
+            exitPulse += 0.08f;
+            if (exitPulse > (float)(2 * Math.PI)) exitPulse -= (float)(2 * Math.PI);
+
+            if (currentState == GameState.Playing)
+            {
+                UpdateGameLogic();
+                CheckGameConditions();
+            }
             Invalidate();
-        };
-        _timer.Start();
-
-        Recalculate();
-        KeyDown += OnKeyDownMovePlayer;
-    }
-
-    private void OnKeyDownMovePlayer(object? sender, KeyEventArgs e)
-    {
-        if (e.KeyCode == Keys.R)
-        {
-            ResetGame();
-            return;
         }
 
-        if (_state != GameState.Playing) return;
-
-        const double step = 0.25;
-        var next = _player;
-
-        if (e.KeyCode == Keys.W) next = new Vector2(_player.X, _player.Y - step);
-        if (e.KeyCode == Keys.S) next = new Vector2(_player.X, _player.Y + step);
-        if (e.KeyCode == Keys.A) next = new Vector2(_player.X - step, _player.Y);
-        if (e.KeyCode == Keys.D) next = new Vector2(_player.X + step, _player.Y);
-
-        if (!Collision.CollidesWithWalls(_player, next, _bsp))
+        private void UpdateGameLogic()
         {
-            _player = next;
-            Recalculate();
-            Invalidate();
-        }
-    }
+            float dx = 0f, dy = 0f;
+            if (moveUp)    dy -= playerSpeed;
+            if (moveDown)  dy += playerSpeed;
+            if (moveLeft)  dx -= playerSpeed;
+            if (moveRight) dx += playerSpeed;
 
-    private void Recalculate()
-    {
-        var frameStart = Stopwatch.GetTimestamp();
-        _canSeePlayer = IsPlayerInFovAndVisible();
-        _fov = Visibility.CastFovRays(_enemy, _bsp, 31);
+            // Hareket yonu acisini guncelle (sadece hareket varsa)
+            if (dx * dx + dy * dy > 0.01f)
+                _playerMoveAngle = (float)(Math.Atan2(dy, dx) * (180.0 / Math.PI));
 
-        int startNode = _graph.FindClosestNode(_enemy.Position);
-        int goalNode = _graph.FindClosestNode(_player);
+            TryMovePlayer(ref player, player.X + dx, player.Y + dy);
 
-        var pathStart = Stopwatch.GetTimestamp();
-        _path = AStarPathfinder.FindPath(_graph, startNode, goalNode);
-        _pathMs = ElapsedMs(pathStart, Stopwatch.GetTimestamp());
-
-        if (_canSeePlayer) _state = GameState.Caught;
-        else if ((_player - _goal).Length() < 0.45) _state = GameState.Won;
-
-        _frameMs = ElapsedMs(frameStart, Stopwatch.GetTimestamp());
-    }
-
-    private bool IsPlayerInFovAndVisible()
-    {
-        var toPlayer = _player - _enemy.Position;
-        double distance = toPlayer.Length();
-        if (distance > _enemy.ViewDistance || distance < 1e-9) return false;
-
-        var forward = new Vector2(Math.Cos(_enemy.DirectionRadians), Math.Sin(_enemy.DirectionRadians));
-        var dir = toPlayer.Normalize();
-        double cos = Vector2.Dot(forward, dir);
-        double halfFovCos = Math.Cos(_enemy.FovRadians / 2.0);
-
-        // Oyuncu gorus konisi icinde degilse LOS bakmaya gerek yok.
-        if (cos < halfFovCos) return false;
-
-        return Visibility.HasLineOfSight(_enemy.Position, _player, _bsp);
-    }
-
-    private static int ElapsedMs(long start, long end)
-        => (int)((end - start) * 1000.0 / Stopwatch.Frequency);
-
-    private void ResetGame()
-    {
-        _player = new Vector2(14, 2);
-        _enemy = new Enemy(new Vector2(2, 2), 0.0, Math.PI / 2, 12.0);
-        _patrolTargetIndex = 1;
-        _state = GameState.Playing;
-        _enemyMode = EnemyMode.Patrol;
-        _lostSightFrames = 0;
-        _currentPatrolRoute = (_currentPatrolRoute + 1) % _patrolRoutes.Length;
-        Recalculate();
-        Invalidate();
-    }
-
-    private void FollowPatrol()
-    {
-        var route = _patrolRoutes[_currentPatrolRoute];
-        int enemyNode = _graph.FindClosestNode(_enemy.Position);
-        int targetNode = route[_patrolTargetIndex];
-        var targetPos = _graph.GetPosition(targetNode);
-
-        // Closest-node jitter'ini azaltmak icin konumsal toleransla hedefe varis kontrolu.
-        if ((_enemy.Position - targetPos).Length() < 0.35 || enemyNode == targetNode)
-        {
-            _patrolTargetIndex = (_patrolTargetIndex + 1) % route.Length;
-            if (_patrolTargetIndex == 0)
+            foreach (EnemyData enemy in enemies)
             {
-                // Her tur tamamlandiginda farkli devriye rotasina gec.
-                _currentPatrolRoute = (_currentPatrolRoute + 1) % _patrolRoutes.Length;
-                route = _patrolRoutes[_currentPatrolRoute];
-            }
-            targetNode = route[_patrolTargetIndex];
-            targetPos = _graph.GetPosition(targetNode);
-        }
+                UpdateEnemyPatrol(enemy);
+                UpdateEnemyLookDirection(enemy);
 
-        var patrolPath = AStarPathfinder.FindPath(_graph, enemyNode, targetNode);
-        if (patrolPath.Count <= 1) return;
-
-        var current = _enemy.Position;
-        var next = _graph.GetPosition(patrolPath[1]);
-        var dir = (next - current).Normalize();
-        var trial = current + dir * 0.12;
-
-        if (!Collision.CollidesWithWalls(current, trial, _bsp))
-        {
-            double angle = Math.Atan2(dir.Y, dir.X);
-            _enemy = new Enemy(trial, angle, _enemy.FovRadians, _enemy.ViewDistance);
-            _stuckFrames = 0;
-        }
-        else
-        {
-            _stuckFrames++;
-            if (_stuckFrames > 20)
-            {
-                // Uzun sure ayni noktada kalirsa sonraki devriye hedefine gecerek kilitlenmeyi kir.
-                _patrolTargetIndex = (_patrolTargetIndex + 1) % route.Length;
-                _stuckFrames = 0;
-            }
-        }
-    }
-
-    private void ChasePlayer()
-    {
-        int startNode = _graph.FindClosestNode(_enemy.Position);
-        int goalNode = _graph.FindClosestNode(_player);
-        _path = AStarPathfinder.FindPath(_graph, startNode, goalNode);
-        if (_path.Count <= 1) return;
-
-        var current = _enemy.Position;
-        var next = _graph.GetPosition(_path[1]);
-        var dir = (next - current).Normalize();
-        var trial = current + dir * 0.14;
-
-        if (!Collision.CollidesWithWalls(current, trial, _bsp))
-        {
-            double angle = Math.Atan2(dir.Y, dir.X);
-            _enemy = new Enemy(trial, angle, _enemy.FovRadians, _enemy.ViewDistance);
-            _stuckFrames = 0;
-        }
-        else
-        {
-            _stuckFrames++;
-            if (_stuckFrames > 20)
-            {
-                // Takipte de kilitlenirse mevcut node'a hizalayip tekrar planla.
-                int node = _graph.FindClosestNode(_enemy.Position);
-                var pos = _graph.GetPosition(node);
-                _enemy = new Enemy(pos, _enemy.DirectionRadians, _enemy.FovRadians, _enemy.ViewDistance);
-                _stuckFrames = 0;
-            }
-        }
-    }
-
-    private void UpdateEnemy()
-    {
-        if (_state != GameState.Playing) return;
-
-        if (_canSeePlayer)
-        {
-            _enemyMode = EnemyMode.Chase;
-            _lostSightFrames = 0;
-        }
-        else if (_enemyMode == EnemyMode.Chase)
-        {
-            _lostSightFrames++;
-            // Titremeyi onlemek icin birkac frame daha takipte kal.
-            if (_lostSightFrames > 35)
-            {
-                _enemyMode = EnemyMode.Patrol;
-                _lostSightFrames = 0;
+                enemy.FovPolygon = Geometry.ComputeFieldOfView(
+                    enemy.Position, enemy.Angle, fovRadius, fovHalfAngle, walls, bspTree, fovRayCount);
             }
         }
 
-        if (_enemyMode == EnemyMode.Chase) ChasePlayer();
-        else FollowPatrol();
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.Clear(Color.FromArgb(20, 22, 27));
-
-        DrawGrid(g);
-        DrawWalls(g);
-        DrawGraph(g);
-        DrawFov(g);
-        DrawPath(g);
-        DrawActors(g);
-        DrawGoal(g);
-        DrawSidebar(g);
-        DrawStatusBanner(g);
-    }
-
-    private static void DrawGrid(Graphics g)
-    {
-        using var mapBg = new SolidBrush(Color.FromArgb(28, 33, 42));
-        g.FillRectangle(mapBg, 0, 0, MapWidth, MapHeight);
-
-        using var pen = new Pen(Color.FromArgb(52, 58, 70), 1);
-        for (int x = 0; x <= 16; x++) g.DrawLine(pen, x * WorldScale, 0, x * WorldScale, MapHeight);
-        for (int y = 0; y <= 10; y++) g.DrawLine(pen, 0, y * WorldScale, MapWidth, y * WorldScale);
-
-        using var border = new Pen(Color.FromArgb(130, 150, 180), 2);
-        g.DrawRectangle(border, 0, 0, MapWidth, MapHeight);
-    }
-
-    private void DrawWalls(Graphics g)
-    {
-        using var penShadow = new Pen(Color.FromArgb(80, 0, 0, 0), 7);
-        using var pen = new Pen(Color.FromArgb(228, 235, 247), 4);
-        for (int i = 0; i < _walls.Count; i++)
+        private void UpdateEnemyPatrol(EnemyData enemy)
         {
-            var w = _walls[i];
-            g.DrawLine(penShadow, ToPoint(w.A), ToPoint(w.B));
-            g.DrawLine(pen, ToPoint(w.A), ToPoint(w.B));
-        }
-    }
+            if (enemy.PatrolRoute.Count == 0) return;
 
-    private void DrawGraph(Graphics g)
-    {
-        using var edgePen = new Pen(Color.FromArgb(65, 110, 185), 2);
-        using var nodeBrush = new SolidBrush(Color.FromArgb(145, 190, 255));
+            // Alert flash sayaci
+            if (enemy.AlertFlashFrames > 0) enemy.AlertFlashFrames--;
+            else enemy.AlertFlash = false;
 
-        for (int i = 0; i < _graph.NodeCount; i++)
-        {
-            var edges = _graph.GetEdges(i);
-            var from = _graph.GetPosition(i);
-            for (int j = 0; j < edges.Count; j++)
+            // Idle bekleme: hedefe varinca durup bekle
+            if (enemy.IdleFramesLeft > 0)
             {
-                var to = _graph.GetPosition(edges[j].To);
-                g.DrawLine(edgePen, ToPoint(from), ToPoint(to));
+                enemy.IdleFramesLeft--;
+                return;
+            }
+
+            Vector2D patrolTarget = enemy.GetPatrolTarget();
+
+            if (Vector2D.Distance(enemy.Position, patrolTarget) < PatrolArrivalDist)
+            {
+                enemy.PatrolIndex = (enemy.PatrolIndex + 1) % enemy.PatrolRoute.Count;
+                patrolTarget = enemy.GetPatrolTarget();
+                enemy.CurrentPath.Clear();
+                enemy.StuckFrames = 0;
+                enemy.IdleFramesLeft = IdleFrames;  // bir sonraki noktaya gecmeden bekle
+                return;
+            }
+
+            float moved = (float)Math.Sqrt(
+                (enemy.Position.X - enemy.LastX) * (enemy.Position.X - enemy.LastX) +
+                (enemy.Position.Y - enemy.LastY) * (enemy.Position.Y - enemy.LastY));
+            if (moved < 0.4f) enemy.StuckFrames++;
+            else               enemy.StuckFrames = 0;
+
+            enemy.LastX = enemy.Position.X;
+            enemy.LastY = enemy.Position.Y;
+
+            // --- Takılma kurtarma ---
+            bool forceReplan = false;
+            if (enemy.StuckFrames >= StuckSkipLimit)
+            {
+                // 2 sn boyunca hiç ilerleyemediyse: mevcut patrol noktasını atla
+                enemy.PatrolIndex = (enemy.PatrolIndex + 1) % enemy.PatrolRoute.Count;
+                patrolTarget = enemy.GetPatrolTarget();
+                enemy.CurrentPath.Clear();
+                enemy.StuckFrames = 0;   // sıfırla — yeni hedefe taze başla
+                forceReplan = true;
+            }
+            else if (enemy.StuckFrames == StuckFrameLimit)
+            {
+                // TAM 60. kare: yolu bir kez temizle; sayaç artmaya devam etsin
+                // (StuckFrameLimit'e sabitlemek her kare replan'a yol açıyordu)
+                enemy.CurrentPath.Clear();
+                forceReplan = true;
+                // enemy.StuckFrames değiştirilmiyor → 61, 62 ... 120 sayılacak
+            }
+
+            enemy.PathUpdateCounter++;
+            if (forceReplan || enemy.PathUpdateCounter >= PathUpdateInterval ||
+                enemy.CurrentPath.Count == 0)
+            {
+                enemy.CurrentPath = pathfinder.FindPathToPosition(
+                    navGraph, enemy.Position, patrolTarget, walls, bspTree);
+                enemy.PathUpdateCounter = 0;
+            }
+
+            if (enemy.CurrentPath.Count > 0)
+                FollowPathWaypoint(enemy);
+            else
+                MoveEnemyToward(ref enemy.Position, patrolTarget);
+        }
+
+        private void FollowPathWaypoint(EnemyData enemy)
+        {
+            Vector2D targetNode = enemy.CurrentPath[0];
+            float dist = Vector2D.Distance(enemy.Position, targetNode);
+
+            if (dist <= PatrolArrivalDist)
+            {
+                enemy.CurrentPath.RemoveAt(0);
+                return;
+            }
+
+            // PatrolSystem.MoveTowardTarget: 8-yon sliding, kose suruntusu yok
+            PatrolSystem.MoveTowardTarget(ref enemy.Position, targetNode, enemySpeed, entityRadius, walls);
+
+            if (Vector2D.Distance(enemy.Position, targetNode) < PatrolArrivalDist)
+                enemy.CurrentPath.RemoveAt(0);
+        }
+
+        private void MoveEnemyToward(ref Vector2D pos, Vector2D target)
+        {
+            PatrolSystem.MoveTowardTarget(ref pos, target, enemySpeed, entityRadius, walls);
+        }
+
+        private void TryMovePlayer(ref Vector2D pos, float nextX, float nextY)
+        {
+            Vector2D next = new Vector2D(nextX, nextY);
+            if (!Geometry.CircleHitsWalls(pos, next, entityRadius, walls))
+            {
+                pos.X = nextX;
+                pos.Y = nextY;
+                return;
+            }
+
+            // Eksen bazli sliding
+            bool movedX = false, movedY = false;
+            if (!Geometry.CircleHitsWalls(pos, new Vector2D(nextX, pos.Y), entityRadius, walls))
+            { pos.X = nextX; movedX = true; }
+            if (!Geometry.CircleHitsWalls(pos, new Vector2D(pos.X, nextY), entityRadius, walls))
+            { pos.Y = nextY; movedY = true; }
+
+            // Kose duzeltme: sadece bir eksen bloke olduysa
+            // hareket vektorunu duvara paralel bilesene yansit
+            if (movedX == movedY) return; // ikisi de gecti veya ikisi de bloklandi
+            float mx = nextX - (pos.X - (movedX ? 0 : nextX - pos.X));
+            float my = nextY - (pos.Y - (movedY ? 0 : nextY - pos.Y));
+            float len = (float)Math.Sqrt(mx * mx + my * my);
+            if (len < 0.01f) return;
+            // Kalan hareket yonunde kucuk bir ek deneme (kose surtustu azaltir)
+            float scale = (playerSpeed * 0.3f) / len;
+            float ex = pos.X + mx * scale;
+            float ey = pos.Y + my * scale;
+            if (!Geometry.CircleHitsWalls(pos, new Vector2D(ex, ey), entityRadius, walls))
+            { pos.X = ex; pos.Y = ey; }
+        }
+
+        private void CheckGameConditions()
+        {
+            if (Vector2D.Distance(player, targetExit) < entityRadius * 2.5f)
+            {
+                if (currentLevelIndex >= LevelManager.LevelCount - 1)
+                    currentState = GameState.Won;
+                else
+                    currentState = GameState.LevelComplete;
+                return;
+            }
+
+            foreach (EnemyData enemy in enemies)
+            {
+                if (Vector2D.Distance(player, enemy.Position) > fovRadius + entityRadius)
+                    continue;
+
+                // FOV poligonu zaten raycasting ile duvar-kisitli hesaplaniyor;
+                // icindeyse LOS zaten var — ek HasLineOfSight gereksiz BSP traversal
+                if (Geometry.IsPointInFovPolygon(player, enemy.FovPolygon))
+                {
+                    enemy.AlertFlash = true;
+                    enemy.AlertFlashFrames = AlertFlashDuration;
+                    currentState = GameState.Lost;
+                    return;
+                }
             }
         }
 
-        for (int i = 0; i < _graph.NodeCount; i++)
+        protected override void OnPaint(PaintEventArgs e)
         {
-            var p = ToPoint(_graph.GetPosition(i));
-            g.FillEllipse(nodeBrush, p.X - 5, p.Y - 5, 10, 10);
-        }
-    }
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
 
-    private void DrawFov(Graphics g)
-    {
-        var origin = ToPoint(_enemy.Position);
+            DrawHudBar(g);
 
-        if (_fov.Count >= 2)
-        {
-            var points = new PointF[_fov.Count + 1];
-            points[0] = origin;
-            for (int i = 0; i < _fov.Count; i++)
+            g.TranslateTransform(0, HudBarHeight);
+
+            int playW = ClientSize.Width;
+            int playH = ClientSize.Height - HudBarHeight;
+            using (Brush floorBrush = new SolidBrush(Color.FromArgb(35, 38, 48)))
+                g.FillRectangle(floorBrush, 0, 0, playW, playH);
+
+            ApplyMapViewportTransform(g, playW, playH);
+
+            float wallPenW = Math.Max(1.5f, 3f / mapRenderScale);
+            using (Pen wallPen = new Pen(Color.FromArgb(220, 220, 230), wallPenW))
             {
-                points[i + 1] = ToPoint(_fov[i].Point);
+                wallPen.StartCap = LineCap.Round;
+                wallPen.EndCap   = LineCap.Round;
+                for (int i = 0; i < walls.Count; i++)
+                    g.DrawLine(wallPen, walls[i].Start.ToPointF(), walls[i].End.ToPointF());
             }
 
-            using var coneBrush = new SolidBrush(Color.FromArgb(_canSeePlayer ? 90 : 55, 255, 180, 50));
-            g.FillPolygon(coneBrush, points);
+            // Oyuncuya görülen alan (herhangi bir FOV'da ise renk halkası)
+            bool playerInAnyFov = false;
+            foreach (EnemyData enemy in enemies)
+            {
+                if (Geometry.IsPointInFovPolygon(player, enemy.FovPolygon)) { playerInAnyFov = true; break; }
+            }
+            if (playerInAnyFov)
+            {
+                using (Pen warningPen = new Pen(Color.FromArgb(180, Color.OrangeRed), 4f / mapRenderScale))
+                    g.DrawEllipse(warningPen,
+                        player.X - entityRadius - 6, player.Y - entityRadius - 6,
+                        entityRadius * 2 + 12, entityRadius * 2 + 12);
+            }
+
+            foreach (EnemyData enemy in enemies)
+            {
+                DrawFovPolygon(g, enemy);
+                DrawEnemyPath(g, enemy);
+
+                using (Brush enemyBrush = new SolidBrush(enemy.ThemeColor))
+                {
+                    g.FillEllipse(enemyBrush,
+                        enemy.Position.X - entityRadius, enemy.Position.Y - entityRadius,
+                        entityRadius * 2, entityRadius * 2);
+                }
+
+                DrawFacingIndicator(g, enemy);
+                DrawEnemyAlert(g, enemy);
+            }
+
+            // Çıkış noktası — titreşen halka + EXIT etiketi
+            float pulse = (float)(0.5 + 0.5 * Math.Sin(exitPulse));
+            float outerR = 20f + 8f * pulse;
+            using (Brush exitBrush = new SolidBrush(Color.MediumPurple))
+                g.FillEllipse(exitBrush, targetExit.X - 14, targetExit.Y - 14, 28, 28);
+            using (Pen exitPen = new Pen(Color.FromArgb((int)(80 + 160 * pulse), Color.Plum), 2.5f))
+                g.DrawEllipse(exitPen,
+                    targetExit.X - outerR, targetExit.Y - outerR, outerR * 2, outerR * 2);
+            {
+                // "EXIT" etiketi — ölçekle küçük olsun
+                float fontSize = Math.Max(6f, 11f / mapRenderScale);
+                using (Font exitFont = new Font("Segoe UI", fontSize, FontStyle.Bold))
+                {
+                    string label = "EXIT";
+                    SizeF sz = g.MeasureString(label, exitFont);
+                    g.DrawString(label, exitFont, Brushes.Plum,
+                        targetExit.X - sz.Width * 0.5f, targetExit.Y + 16);
+                }
+            }
+
+            // Oyuncu — daire + hareket yönü oku
+            using (Brush playerBrush = new SolidBrush(Color.LimeGreen))
+                g.FillEllipse(playerBrush,
+                    player.X - entityRadius, player.Y - entityRadius,
+                    entityRadius * 2, entityRadius * 2);
+            using (Pen playerBorder = new Pen(Color.FromArgb(180, Color.White), 1.5f))
+                g.DrawEllipse(playerBorder,
+                    player.X - entityRadius, player.Y - entityRadius,
+                    entityRadius * 2, entityRadius * 2);
+            // Hareket yonu oku: sonraki hareket yönüne göre
+            {
+                float moveAngle = _playerMoveAngle;
+                float pr = moveAngle * (float)(Math.PI / 180.0);
+                float ex = player.X + (float)Math.Cos(pr) * (entityRadius + 7);
+                float ey = player.Y + (float)Math.Sin(pr) * (entityRadius + 7);
+                using (Pen arrowPen = new Pen(Color.FromArgb(220, Color.LimeGreen), 2f))
+                {
+                    arrowPen.EndCap = LineCap.ArrowAnchor;
+                    g.DrawLine(arrowPen, player.X, player.Y, ex, ey);
+                }
+            }
+
+            g.ResetTransform();
+            g.TranslateTransform(0, HudBarHeight);
+            DrawGameOverlay(g, playH);
+            g.ResetTransform();
         }
 
-        using var rayPen = new Pen(Color.FromArgb(210, 255, 196, 90), 1.5f);
-        for (int i = 0; i < _fov.Count; i++)
+        // Haritayi oyun alanina sigdir (tamamini goster)
+        private void ApplyMapViewportTransform(Graphics g, float viewW, float viewH)
         {
-            g.DrawLine(rayPen, origin, ToPoint(_fov[i].Point));
+            float mapW = LevelManager.MapRight - LevelManager.MapLeft;
+            float mapH = LevelManager.MapBottom - LevelManager.MapTop;
+            const float pad = 10f;
+
+            float sx = (viewW - pad * 2f) / mapW;
+            float sy = (viewH - pad * 2f) / mapH;
+            mapRenderScale = Math.Min(sx, sy);
+
+            float drawnW = mapW * mapRenderScale;
+            float drawnH = mapH * mapRenderScale;
+            float offsetX = (viewW - drawnW) * 0.5f - LevelManager.MapLeft * mapRenderScale;
+            float offsetY = (viewH - drawnH) * 0.5f - LevelManager.MapTop * mapRenderScale;
+
+            g.TranslateTransform(offsetX, offsetY);
+            g.ScaleTransform(mapRenderScale, mapRenderScale);
+        }
+
+        private void DrawFovPolygon(Graphics g, EnemyData enemy)
+        {
+            if (enemy.FovPolygon == null || enemy.FovPolygon.Count < 3) return;
+
+            PointF[] pts = new PointF[enemy.FovPolygon.Count];
+            for (int i = 0; i < enemy.FovPolygon.Count; i++)
+                pts[i] = enemy.FovPolygon[i].ToPointF();
+
+            using (Brush fovBrush = new SolidBrush(Color.FromArgb(55, enemy.ThemeColor)))
+                g.FillPolygon(fovBrush, pts);
+
+            using (Pen fovEdgePen = new Pen(Color.FromArgb(120, enemy.ThemeColor), 1))
+            {
+                for (int i = 1; i < pts.Length; i++)
+                    g.DrawLine(fovEdgePen, pts[0], pts[i]);
+                g.DrawLine(fovEdgePen, pts[0], pts[pts.Length - 1]);
+            }
+        }
+
+        // Debug: F1 ile acilip kapanir
+        private bool _showDebugPaths = false;
+        private void DrawEnemyPath(Graphics g, EnemyData enemy)
+        {
+            if (!_showDebugPaths) return;
+            if (enemy.CurrentPath == null || enemy.CurrentPath.Count == 0) return;
+
+            using (Pen pathPen = new Pen(Color.FromArgb(80, enemy.ThemeColor), 1.5f))
+            {
+                Vector2D prev = enemy.Position;
+                foreach (Vector2D pt in enemy.CurrentPath)
+                {
+                    g.DrawLine(pathPen, prev.ToPointF(), pt.ToPointF());
+                    prev = pt;
+                }
+            }
+        }
+
+        private void DrawEnemyAlert(Graphics g, EnemyData enemy)
+        {
+            if (!enemy.AlertFlash) return;
+            float ax = enemy.Position.X + 2;
+            float ay = enemy.Position.Y - entityRadius - 22;
+            Font f = _alertFont ?? new Font("Arial", 14f, FontStyle.Bold);
+            g.DrawString("!", f, Brushes.Red, ax, ay);
+        }
+
+        private void DrawFacingIndicator(Graphics g, EnemyData enemy)
+        {
+            float rad = enemy.Angle * (float)(Math.PI / 180.0);
+            float ex = enemy.Position.X + (float)Math.Cos(rad) * (entityRadius + 6);
+            float ey = enemy.Position.Y + (float)Math.Sin(rad) * (entityRadius + 6);
+            using (Pen dirPen = new Pen(Color.White, 2))
+                g.DrawLine(dirPen, enemy.Position.ToPointF(), new PointF(ex, ey));
+        }
+
+        // HUD ust panelde; harita alani asagida kalir
+        private void DrawHudBar(Graphics g)
+        {
+            using (Brush barBrush = new SolidBrush(Color.FromArgb(18, 20, 28)))
+                g.FillRectangle(barBrush, 0, 0, ClientSize.Width, HudBarHeight);
+
+            using (Pen linePen = new Pen(Color.FromArgb(60, 65, 80), 1))
+                g.DrawLine(linePen, 0, HudBarHeight - 1, ClientSize.Width, HudBarHeight - 1);
+
+            string levelInfo = string.Format("Seviye  {0} / {1}", currentLevelIndex + 1, LevelManager.LevelCount);
+            int cy = HudBarHeight / 2 - 7;
+            if (_titleFont != null) g.DrawString(levelInfo, _titleFont, Brushes.WhiteSmoke, 14, cy);
+
+            if (currentState == GameState.Playing && _hudFont != null)
+            {
+                string controls = _showDebugPaths
+                    ? "WASD: Hareket  |  R: Sifirla  |  N: Sonraki  |  F1: Yol Gizle  |  ESC: Cikis"
+                    : "WASD: Hareket  |  R: Sifirla  |  N: Sonraki  |  F1: Yol Goster  |  ESC: Cikis";
+                SizeF sz = g.MeasureString(controls, _hudFont);
+                g.DrawString(controls, _hudFont, Brushes.Gray, ClientSize.Width - sz.Width - 10, cy + 2);
+            }
+        }
+
+        // Kazanma/kaybetme mesajlari harita ortasinda (HUD disinda)
+        private void DrawGameOverlay(Graphics g, int playAreaHeight)
+        {
+            if (currentState == GameState.Playing) return;
+
+            float cx = ClientSize.Width * 0.5f;
+            float cy = playAreaHeight * 0.5f;
+
+            Font bigFont = _bigFont ?? new Font("Arial", 22f, FontStyle.Bold);
+            Font hudFont = _hudFont ?? new Font("Segoe UI", 11f);
+
+            // Yari seffaf karartma paneli
+            using (Brush dimBrush = new SolidBrush(Color.FromArgb(165, 0, 0, 0)))
+                g.FillRectangle(dimBrush, 0, 0, ClientSize.Width, playAreaHeight);
+
+            // Mesaj cercevesi
+            string mainMsg = "";
+            string subMsg  = "";
+            Brush mainColor = Brushes.White;
+
+            if (currentState == GameState.LevelComplete)
+            {
+                mainMsg  = "SEVIYE TAMAMLANDI!";
+                subMsg   = "N: Sonraki Seviye   |   R: Tekrar";
+                mainColor = Brushes.Gold;
+            }
+            else if (currentState == GameState.Won)
+            {
+                mainMsg  = "TUM SEVIYELERI TAMAMLADIN!";
+                subMsg   = "R: Bastan Basla";
+                mainColor = Brushes.LimeGreen;
+            }
+            else if (currentState == GameState.Lost)
+            {
+                mainMsg  = "YAKALANDIN!";
+                subMsg   = "R: Tekrar Dene";
+                mainColor = Brushes.OrangeRed;
+            }
+
+            // Panel kutusu
+            SizeF mainSz = g.MeasureString(mainMsg, bigFont);
+            SizeF subSz  = g.MeasureString(subMsg,  hudFont);
+            float boxW = Math.Max(mainSz.Width, subSz.Width) + 60;
+            float boxH = mainSz.Height + subSz.Height + 40;
+            float bx = cx - boxW * 0.5f;
+            float by = cy - boxH * 0.5f;
+
+            using (Brush boxBrush = new SolidBrush(Color.FromArgb(200, 18, 20, 30)))
+                g.FillRectangle(boxBrush, bx, by, boxW, boxH);
+            using (Pen boxPen = new Pen(Color.FromArgb(180, Color.DimGray), 1.5f))
+                g.DrawRectangle(boxPen, bx, by, boxW, boxH);
+
+            DrawCenteredString(g, mainMsg, bigFont, mainColor, cx, by + 18);
+            DrawCenteredString(g, subMsg,  hudFont, Brushes.Silver, cx, by + boxH - subSz.Height - 14);
+        }
+
+        private static void DrawCenteredString(Graphics g, string text, Font font, Brush brush, float cx, float cy)
+        {
+            SizeF size = g.MeasureString(text, font);
+            g.DrawString(text, font, brush, cx - size.Width * 0.5f, cy - size.Height * 0.5f);
+        }
+
+        private void GameForm_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                Close();
+                return;
+            }
+
+            if (e.KeyCode == Keys.W) moveUp = true;
+            if (e.KeyCode == Keys.S) moveDown = true;
+            if (e.KeyCode == Keys.A) moveLeft = true;
+            if (e.KeyCode == Keys.D) moveRight = true;
+
+            if (e.KeyCode == Keys.R)
+            {
+                LoadLevel(currentLevelIndex);
+                return;
+            }
+
+            if (e.KeyCode == Keys.N && currentState == GameState.LevelComplete)
+                LoadLevel(currentLevelIndex + 1);
+
+            if (e.KeyCode == Keys.F1)
+                _showDebugPaths = !_showDebugPaths;
+        }
+
+        private void GameForm_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.W) moveUp = false;
+            if (e.KeyCode == Keys.S) moveDown = false;
+            if (e.KeyCode == Keys.A) moveLeft = false;
+            if (e.KeyCode == Keys.D) moveRight = false;
         }
     }
-
-    private void DrawPath(Graphics g)
-    {
-        if (_path.Count < 2) return;
-        using var shadow = new Pen(Color.FromArgb(90, 0, 0, 0), 7);
-        using var pen = new Pen(Color.FromArgb(255, 80, 220, 255), 4);
-        for (int i = 0; i < _path.Count - 1; i++)
-        {
-            var a = ToPoint(_graph.GetPosition(_path[i]));
-            var b = ToPoint(_graph.GetPosition(_path[i + 1]));
-            g.DrawLine(shadow, a, b);
-            g.DrawLine(pen, a, b);
-        }
-    }
-
-    private void DrawActors(Graphics g)
-    {
-        var player = ToPoint(_player);
-        var enemy = ToPoint(_enemy.Position);
-
-        using var playerBrush = new SolidBrush(_canSeePlayer ? Color.OrangeRed : Color.FromArgb(60, 225, 120));
-        using var enemyBrush = new SolidBrush(Color.Gold);
-        using var ringPen = new Pen(Color.White, 2);
-        using var lookPen = new Pen(Color.FromArgb(255, 240, 160), 2);
-
-        g.FillEllipse(playerBrush, player.X - 10, player.Y - 10, 20, 20);
-        g.DrawEllipse(ringPen, player.X - 12, player.Y - 12, 24, 24);
-
-        g.FillEllipse(enemyBrush, enemy.X - 10, enemy.Y - 10, 20, 20);
-        g.DrawEllipse(ringPen, enemy.X - 12, enemy.Y - 12, 24, 24);
-
-        var look = new PointF(
-            enemy.X + (float)(Math.Cos(_enemy.DirectionRadians) * 22),
-            enemy.Y + (float)(Math.Sin(_enemy.DirectionRadians) * 22));
-        g.DrawLine(lookPen, enemy, look);
-    }
-
-    private void DrawGoal(Graphics g)
-    {
-        var p = ToPoint(_goal);
-        using var goalPen = new Pen(Color.Violet, 4);
-        using var goalFill = new SolidBrush(Color.FromArgb(90, 198, 80, 230));
-        g.FillEllipse(goalFill, p.X - 11, p.Y - 11, 22, 22);
-        g.DrawEllipse(goalPen, p.X - 13, p.Y - 13, 26, 26);
-    }
-
-    private void DrawSidebar(Graphics g)
-    {
-        float panelX = MapWidth + SidebarGap;
-        float panelW = ClientSize.Width - panelX - 20;
-        float panelH = MapHeight;
-
-        using var bg = new SolidBrush(Color.FromArgb(35, 40, 52));
-        using var border = new Pen(Color.FromArgb(95, 110, 138), 2);
-        g.FillRectangle(bg, panelX, 0, panelW, panelH);
-        g.DrawRectangle(border, panelX, 0, panelW, panelH);
-
-        using var titleFont = new Font(Font.FontFamily, 15, FontStyle.Bold);
-        using var sectionFont = new Font(Font.FontFamily, 11, FontStyle.Bold);
-        using var bodyFont = new Font(Font.FontFamily, 10, FontStyle.Regular);
-        using var headerBrush = new SolidBrush(Color.WhiteSmoke);
-        using var bodyBrush = new SolidBrush(Color.FromArgb(220, 230, 250));
-        using var mono = new Font(FontFamily.GenericMonospace, 11, FontStyle.Regular);
-
-        g.DrawString("SIMULASYON PANELI", titleFont, headerBrush, panelX + 14, 14);
-        DrawPanelCard(g, panelX + 12, 56, panelW - 24, 88, "KONTROLLER",
-            "- W A S D : Oyuncu hareket\n- R : Oyunu sifirla", sectionFont, bodyFont);
-
-        DrawPanelCard(g, panelX + 12, 154, panelW - 24, 160, "GORSEL ANAHTAR",
-            "- Sari      : Dusman\n- Yesil     : Oyuncu guvende\n- Turuncu   : Oyuncu goruste\n- Mor       : Hedef\n- Acik Mavi : A* yolu\n- Turuncu fan : FOV",
-            sectionFont, bodyFont);
-
-        string metrics = $"Ray Sayisi   : {_fov.Count}\nYol Dugumu   : {_path.Count}\nPath Suresi  : {_pathMs} ms\nFrame Suresi : {_frameMs} ms\nDevriye Rota : {_currentPatrolRoute + 1}/{_patrolRoutes.Length}";
-        DrawPanelCard(g, panelX + 12, 324, panelW - 24, 132, "CANLI METRIKLER", metrics, sectionFont, mono);
-
-        string aiText = $"Dusman Modu: {(_enemyMode == EnemyMode.Chase ? "Takip" : "Devriye")}";
-        DrawPanelCard(g, panelX + 12, 466, panelW - 24, 62, "AI DURUMU", aiText, sectionFont, bodyFont);
-
-        DrawPanelCard(g, panelX + 12, 538, panelW - 24, 62, "OYUN DURUMU", GetStateText(), sectionFont, bodyFont, GetStateBrush());
-    }
-
-    private void DrawStatusBanner(Graphics g)
-    {
-        using var font = new Font(Font.FontFamily, 16, FontStyle.Bold);
-        using var fg = new SolidBrush(Color.White);
-        using var bg = new SolidBrush(GetBannerColor());
-
-        const float w = 560f;
-        const float h = 44f;
-        float x = (MapWidth - w) / 2f;
-        const float y = 14f;
-
-        g.FillRectangle(bg, x, y, w, h);
-        g.DrawString(GetStateText(), font, fg, x + 14, y + 8);
-    }
-
-    private string GetStateText()
-    {
-        return _state switch
-        {
-            GameState.Won => "KAZANDIN - Hedefe ulastin",
-            GameState.Caught => "YAKALANDIN - Dusman seni gordu",
-            _ => _canSeePlayer ? "Tehlike! Dusman gorusunde" : "Oyun devam ediyor"
-        };
-    }
-
-    private Brush GetStateBrush()
-    {
-        return _state switch
-        {
-            GameState.Won => Brushes.MediumSpringGreen,
-            GameState.Caught => Brushes.OrangeRed,
-            _ => _canSeePlayer ? Brushes.Gold : Brushes.LightGreen
-        };
-    }
-
-    private Color GetBannerColor()
-    {
-        return _state switch
-        {
-            GameState.Won => Color.FromArgb(180, 28, 120, 65),
-            GameState.Caught => Color.FromArgb(180, 150, 36, 28),
-            _ => _canSeePlayer ? Color.FromArgb(175, 145, 90, 20) : Color.FromArgb(170, 35, 95, 60)
-        };
-    }
-
-    private static void DrawPanelCard(
-        Graphics g,
-        float x,
-        float y,
-        float w,
-        float h,
-        string title,
-        string body,
-        Font titleFont,
-        Font bodyFont,
-        Brush? bodyBrushOverride = null)
-    {
-        using var cardBg = new SolidBrush(Color.FromArgb(48, 55, 69));
-        using var cardBorder = new Pen(Color.FromArgb(95, 112, 140), 1);
-        using var titleBrush = new SolidBrush(Color.FromArgb(236, 241, 255));
-        using var bodyBrush = new SolidBrush(Color.FromArgb(214, 224, 245));
-
-        g.FillRectangle(cardBg, x, y, w, h);
-        g.DrawRectangle(cardBorder, x, y, w, h);
-        g.DrawString(title, titleFont, titleBrush, x + 10, y + 8);
-        g.DrawString(body, bodyFont, bodyBrushOverride ?? bodyBrush, x + 10, y + 30);
-    }
-
-    private static PointF ToPoint(Vector2 v) => new((float)(v.X * WorldScale), (float)(v.Y * WorldScale));
-}
-
-public enum GameState
-{
-    Playing,
-    Won,
-    Caught
-}
-
-public enum EnemyMode
-{
-    Patrol,
-    Chase
 }
