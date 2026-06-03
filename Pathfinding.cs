@@ -1,134 +1,237 @@
 using System;
 using System.Collections.Generic;
 
-namespace StealthVisionSystem;
-
-public sealed class WaypointGraph
+namespace DataStructures_SVS
 {
-    private readonly DynamicArray<Vector2> _nodes = new();
-    private readonly DynamicArray<DynamicArray<Edge>> _adjacency = new();
-    private readonly BspTree _bsp;
-
-    public WaypointGraph(DynamicArray<WallSegment> walls) => _bsp = new BspTree(walls);
-    public int NodeCount => _nodes.Count;
-
-    public int AddNode(Vector2 position)
+    // Graf dugumu: grid hucresi veya waypoint konumu
+    public class GraphNode
     {
-        _nodes.Add(position);
-        _adjacency.Add(new DynamicArray<Edge>());
-        return _nodes.Count - 1;
-    }
+        public int Id;
+        public Vector2D Position;
 
-    public Vector2 GetPosition(int node) => _nodes[node];
-    public DynamicArray<Edge> GetEdges(int node) => _adjacency[node];
-
-    public void ConnectIfVisible(int a, int b)
-    {
-        var pa = _nodes[a];
-        var pb = _nodes[b];
-        if (Collision.CollidesWithWalls(pa, pb, _bsp)) return;
-        double cost = (pb - pa).Length();
-        _adjacency[a].Add(new Edge(b, cost));
-        _adjacency[b].Add(new Edge(a, cost));
-    }
-
-    public int FindClosestNode(Vector2 p)
-    {
-        int bestIndex = -1;
-        double best = double.MaxValue;
-        for (int i = 0; i < _nodes.Count; i++)
+        public GraphNode(int id, Vector2D pos)
         {
-            double d = (_nodes[i] - p).Length();
-            if (d < best)
-            {
-                best = d;
-                bestIndex = i;
-            }
+            Id = id;
+            Position = pos;
         }
-        return bestIndex;
     }
-}
 
-public readonly struct Edge
-{
-    public int To { get; }
-    public double Cost { get; }
-    public Edge(int to, double cost)
+    // Graf kenari: iki dugum arasi baglanti ve maliyeti (mesafe)
+    public class GraphEdge
     {
-        To = to;
-        Cost = cost;
-    }
-}
+        public int ToNodeId;
+        public float Cost;
 
-public static class AStarPathfinder
-{
-    public static DynamicArray<int> FindPath(WaypointGraph graph, int start, int goal)
-    {
-        var open = new MinHeap<OpenNode>((a, b) => a.F.CompareTo(b.F));
-        var cameFrom = new Dictionary<int, int>();
-        var gScore = new Dictionary<int, double>();
-        var closed = new HashSet<int>();
-
-        for (int i = 0; i < graph.NodeCount; i++) gScore[i] = double.MaxValue;
-        gScore[start] = 0;
-
-        open.Push(new OpenNode(start, Heuristic(graph, start, goal), 0));
-
-        while (open.Count > 0)
+        public GraphEdge(int to, float cost)
         {
-            var current = open.Pop();
-            if (closed.Contains(current.Node)) continue;
-            if (current.Node == goal) return ReconstructPath(cameFrom, current.Node);
-            closed.Add(current.Node);
+            ToNodeId = to;
+            Cost = cost;
+        }
+    }
 
-            var edges = graph.GetEdges(current.Node);
-            for (int i = 0; i < edges.Count; i++)
+    // Yurunebilir alanlarin graf olarak modellenmesi.
+    // Dugumler: konum noktalari; kenarlar: duvar engeli olmayan gecilebilir baglantilar.
+    public class WaypointGraph
+    {
+        private DynamicArray<GraphNode> nodes = new DynamicArray<GraphNode>();
+        private List<GraphEdge>[] adjacency;
+
+        public int NodeCount => nodes.Count;
+
+        public int AddNode(Vector2D position)
+        {
+            int id = nodes.Count;
+            nodes.Add(new GraphNode(id, position));
+            return id;
+        }
+
+        public GraphNode GetNode(int id) => nodes[id];
+
+        // Tum dugumler icin bos adjacency listesi olusturur (BuildEdges oncesi cagrilabilir)
+        private void EnsureAdjacency()
+        {
+            if (adjacency != null && adjacency.Length == nodes.Count) return;
+            adjacency = new List<GraphEdge>[nodes.Count];
+            for (int i = 0; i < nodes.Count; i++) adjacency[i] = new List<GraphEdge>();
+        }
+
+        // Iki dugum arasinda duvar yoksa ve gecit entity'ye yeterliyse kenar ekler
+        public void BuildEdges(DynamicArray<Segment> walls, BspTree bsp, float entityRadius)
+        {
+            int n = nodes.Count;
+            adjacency = new List<GraphEdge>[n];
+            for (int i = 0; i < n; i++) adjacency[i] = new List<GraphEdge>();
+
+            for (int i = 0; i < n; i++)
             {
-                var edge = edges[i];
-                if (closed.Contains(edge.To)) continue;
-
-                double tentativeG = gScore[current.Node] + edge.Cost;
-                if (tentativeG < gScore[edge.To])
+                for (int j = i + 1; j < n; j++)
                 {
-                    cameFrom[edge.To] = current.Node;
-                    gScore[edge.To] = tentativeG;
-                    double h = Heuristic(graph, edge.To, goal);
-                    open.Push(new OpenNode(edge.To, tentativeG + h, tentativeG));
+                    if (!Geometry.PathClearForEntity(
+                        nodes[i].Position, nodes[j].Position, entityRadius, bsp, walls))
+                        continue;
+
+                    float dist = Vector2D.Distance(nodes[i].Position, nodes[j].Position);
+                    adjacency[i].Add(new GraphEdge(j, dist));
+                    adjacency[j].Add(new GraphEdge(i, dist));
                 }
             }
         }
 
-        return new DynamicArray<int>();
+        public List<GraphEdge> GetNeighbors(int nodeId)
+        {
+            EnsureAdjacency();
+            return adjacency[nodeId];
+        }
     }
 
-    private static DynamicArray<int> ReconstructPath(Dictionary<int, int> cameFrom, int current)
+    // A* icin heap dugumu (FCost = GCost + HCost)
+    public class AStarHeapNode : IComparable<AStarHeapNode>
     {
-        var reverse = new DynamicArray<int>();
-        reverse.Add(current);
-        while (cameFrom.TryGetValue(current, out int parent))
+        public int NodeId;
+        public float GCost;
+        public float HCost;
+        public float FCost => GCost + HCost;
+        public int ParentId;
+        public bool HasParent;
+
+        public int CompareTo(AStarHeapNode other)
         {
-            reverse.Add(parent);
-            current = parent;
+            int cmp = FCost.CompareTo(other.FCost);
+            if (cmp != 0) return cmp;
+            return HCost.CompareTo(other.HCost);
+        }
+    }
+
+    // A* yol bulma: Min-Heap ile en dusuk maliyetli dugum secimi.
+    public class AStarPathfinder
+    {
+        private const int NO_PARENT = -1;
+
+        // Onceden kurulmus graf uzerinde iki dugum arasi A*
+        public List<Vector2D> FindPathBetweenNodes(WaypointGraph graph, List<Vector2D> nodePositions,
+            int startId, int targetId)
+        {
+            var result = new List<Vector2D>();
+            if (startId < 0 || targetId < 0 || startId >= nodePositions.Count || targetId >= nodePositions.Count)
+                return result;
+
+            if (startId == targetId)
+            {
+                result.Add(nodePositions[targetId].Clone());
+                return result;
+            }
+
+            int n = graph.NodeCount;
+            var openHeap = new MinHeap<AStarHeapNode>();
+            var openLookup = new Dictionary<int, AStarHeapNode>();
+            var closed = new bool[n];
+            var bestG = new float[n];
+            var parent = new int[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                bestG[i] = float.MaxValue;
+                parent[i] = NO_PARENT;
+            }
+
+            Vector2D targetPos = nodePositions[targetId];
+
+            var startNode = new AStarHeapNode
+            {
+                NodeId = startId,
+                GCost = 0,
+                HCost = Vector2D.Distance(nodePositions[startId], targetPos),
+                ParentId = NO_PARENT,
+                HasParent = false
+            };
+
+            bestG[startId] = 0;
+            openHeap.Push(startNode);
+            openLookup[startId] = startNode;
+
+            while (!openHeap.IsEmpty)
+            {
+                AStarHeapNode current = openHeap.Pop();
+                openLookup.Remove(current.NodeId);
+
+                if (closed[current.NodeId]) continue;
+                closed[current.NodeId] = true;
+
+                if (current.NodeId == targetId)
+                {
+                    return ReconstructPath(graph, parent, targetId, nodePositions[startId]);
+                }
+
+                List<GraphEdge> neighbors = graph.GetNeighbors(current.NodeId);
+                for (int i = 0; i < neighbors.Count; i++)
+                {
+                    GraphEdge edge = neighbors[i];
+                    int neighborId = edge.ToNodeId;
+                    if (closed[neighborId]) continue;
+
+                    float tentativeG = current.GCost + edge.Cost;
+                    if (tentativeG >= bestG[neighborId]) continue;
+
+                    bestG[neighborId] = tentativeG;
+                    parent[neighborId] = current.NodeId;
+
+                    var neighborHeap = new AStarHeapNode
+                    {
+                        NodeId = neighborId,
+                        GCost = tentativeG,
+                        HCost = Vector2D.Distance(graph.GetNode(neighborId).Position, targetPos),
+                        ParentId = current.NodeId,
+                        HasParent = true
+                    };
+
+                    openHeap.Push(neighborHeap);
+                    openLookup[neighborId] = neighborHeap;
+                }
+            }
+
+            return result;
         }
 
-        var path = new DynamicArray<int>(reverse.Count);
-        for (int i = reverse.Count - 1; i >= 0; i--) path.Add(reverse[i]);
-        return path;
-    }
-
-    private static double Heuristic(WaypointGraph graph, int a, int b)
-        => (graph.GetPosition(a) - graph.GetPosition(b)).Length();
-
-    private readonly struct OpenNode
-    {
-        public int Node { get; }
-        public double F { get; }
-        public double G { get; }
-        public OpenNode(int node, double f, double g)
+        public List<Vector2D> FindPathToPosition(LevelNavigationGraph nav, Vector2D from, Vector2D to,
+            DynamicArray<Segment> walls, BspTree bsp)
         {
-            Node = node;
-            F = f;
-            G = g;
+            // Direkt yol varsa grafiğe gerek yok
+            if (Geometry.PathClearForEntity(from, to, PatrolSystem.GraphPathRadius, bsp, walls))
+            {
+                var direct = new List<Vector2D>();
+                direct.Add(to.Clone());
+                return direct;
+            }
+
+            // startId: LOS tercihli, yoksa en yakın düğüm (fallback)
+            int startId  = nav.FindNearestReachableNode(from, to, walls, bsp);
+            // targetId: bağlı düğüm tercihli (izole sıfır-kenarlı düğüm hedef seçilmez)
+            int targetId = nav.FindNearestConnectedNode(to);
+
+            // Yine de -1 çıkarsa (boş graf) boş döndür
+            if (startId < 0 || targetId < 0) return new List<Vector2D>();
+
+            return FindPathBetweenNodes(nav.Graph, nav.GetNodePositions(), startId, targetId);
+        }
+
+        private List<Vector2D> ReconstructPath(WaypointGraph graph, int[] parent, int targetId, Vector2D startPos)
+        {
+            var path = new List<Vector2D>();
+            int current = targetId;
+
+            // parent[startId] == NO_PARENT olacagindan baslangic dugumu dahil edilmez,
+            // yalnizca hedef yonundeki adimlar eklenir
+            while (current != NO_PARENT)
+            {
+                path.Insert(0, graph.GetNode(current).Position.Clone());
+                current = parent[current];
+            }
+
+            // Baslangic konumuna cok yakin noktalari at (gereksiz adim)
+            while (path.Count > 0 && Vector2D.DistanceSquared(path[0], startPos) < 100f)
+                path.RemoveAt(0);
+
+            return path;
         }
     }
 }
