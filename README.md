@@ -1,105 +1,171 @@
-# 🎮 Veri Yapıları ile BSP Ağacı Tabanlı Görüş Alanı ve Çarpışma Tespiti
+# Veri Yapıları ile BSP Ağacı Tabanlı Görüş Alanı ve Çarpışma Tespiti
 
-Bu proje, C# ile geliştirilmiş 2D (top-down) bir gizlilik oyunu simülasyonudur. Oyuncu engeller arasında hedefe ulaşmaya çalışırken, düşman raycasting tabanlı görüş sistemi ile oyuncuyu yakalamaya çalışır.
+Bu proje, C# ile geliştirilmiş 2D (top-down) bir gizlilik oyunu simülasyonudur.
+Oyuncu engeller arasında çıkış noktasına ulaşmaya çalışırken, BSP ağacı tabanlı
+raycasting görüş sistemi ve A* pathfinding ile donatılmış düşman devriyeleri
+oyuncuyu yakalamaya çalışır.
 
-## 🎯 Proje Amacı
+**GitHub Repo:** https://github.com/cakirberat/data-structures-SVS
 
-- Oyun haritasını uygun veri yapılarıyla modellemek 🗺️
-- Görüş çizgisi ve görüş konisi hesaplamalarını verimli yapmak 👁️
-- Duvar çarpışma kontrolünü güvenilir şekilde yapmak 🧱
-- Düşman hareketi için A* tabanlı yol bulma kullanmak 🤖
+---
 
-## 🏗️ Faz 1 - Zorunlu Veri Yapıları
+## Proje Amacı
 
-Bu projede aşağıdaki veri yapıları sıfırdan implemente edilmiştir:
+- Oyun haritasını uygun veri yapılarıyla modellemek
+- Görüş çizgisi ve görüş konisi hesaplamalarını BSP ile verimli yapmak
+- Duvar çarpışma kontrolünü daire tabanlı (swept-circle) güvenilir şekilde yapmak
+- Düşman hareketi için A* tabanlı yol bulma kullanmak
+- Üç farklı seviyede artan zorluk sistemi sunmak
 
-- **BSP Tree** (`BspTree`, `BspNode`): Duvar segmentlerini uzamsal olarak böler, görüş/çarpışma sorgularında adayları daraltır. 🌳
-- **Graph** (`WaypointGraph`): Yürünebilir noktalar arası bağlantıları tutar. 🕸️
-- **Min-Heap** (`MinHeap<T>`): A* açık kümesinde en düşük maliyetli düğümü seçer. 🔢
-- **Dynamic Array** (`DynamicArray<T>`): Duvarlar, ışın sonuçları ve komşuluk listeleri için kullanılır. 📋
+---
 
-## ⚙️ Faz 2 - Zorunlu Algoritmalar
+## Faz 1 — Zorunlu Veri Yapıları
 
-- **Line of Sight**: Düşman ve oyuncu arasında duvar kesişimi var mı kontrol edilir. 📏
-- **Raycasting / Intersection**: Düşmanın FOV konisindeki ışınların duvarlarla kesişim noktası hesaplanır. 🔦
-- **A* Pathfinding**: Düşmanın engelleri dolaşarak hedefe ulaşması için kullanılır. 📍
+Aşağıdaki veri yapıları sıfırdan implemente edilmiştir:
 
-## 🖥️ Faz 3 - Arayüz Gereksinimleri
+| Yapı | Dosya | Açıklama |
+|---|---|---|
+| `BspTree` / `BspNode` | `DataStructures.cs` | Duvar segmentlerini uzamsal olarak böler; LOS/çarpışma sorgularında adayları daraltır |
+| `WaypointGraph` | `Pathfinding.cs` | Yürünebilir noktalar ve geçilebilir bağlantıları tutar |
+| `MinHeap<T>` | `DataStructures.cs` | A* açık kümesinde en düşük f-maliyetli düğümü O(log n)'de seçer |
+| `DynamicArray<T>` | `DataStructures.cs` | Duvarlar, FOV poligon noktaları ve komşuluk listeleri için dinamik dizi |
 
-Proje, WinForms tabanlı 2D bir arayüz ile geliştirilmiştir:
+---
 
-- Kuşbakışı harita çizimi 🗺️
-- Duvarların ve yürünebilir graph'ın gösterimi 🧶
-- Düşman görüş konisi (ray + dolgulu fan) gösterimi 📐
-- Oyuncu/düşman hareketi ve durum paneli 👤
-- Canlı metrik paneli (ray sayısı, path süresi, frame süresi) 📊
+## Faz 2 — Zorunlu Algoritmalar
 
-## 🕹️ Oyun Davranışı
+| Algoritma | Dosya | Açıklama |
+|---|---|---|
+| Line of Sight | `Geometry.cs` | Düşman ile oyuncu arasında duvar kesişimi `BspTree` ile sorgulanır |
+| Raycasting / FOV | `Geometry.cs` | 68 ışın ile duvar kısıtlı görüş konisi poligonu oluşturulur |
+| A* Pathfinding | `Pathfinding.cs` | `MinHeap` + `WaypointGraph` üzerinde engel dolaşan yol bulma |
+| Çarpışma | `Geometry.cs` | Swept-circle + 8-yön sliding ile duvarlardan geçilmesi önlenir |
 
-- Oyuncu `W`, `A`, `S`, `D` ile hareket eder. ⌨️
-- Oyuncu duvarlardan geçemez (segment kesişim tabanlı çarpışma kontrolü). 🛑
-- Düşman devriye modunda rotalar arasında gezer. 🔄
-- Oyuncu görüş konisine ve LOS'e girerse düşman takip moduna geçer. ⚠️
-- Oyuncu hedefe ulaşırsa kazanır; görülürse yakalanır. 🏆
-- `R` tuşu oyunu sıfırlar. 🔄
+---
 
-## 📂 Dosya Yapısı
+## Faz 3 — Arayüz
 
-- `New Proje/StealthVisionSystem/Program.cs`: Uygulama girişi, harita ve graph kurulumları
-- `New Proje/StealthVisionSystem/CoreTypes.cs`: Temel tipler (`Vector2`, `WallSegment`, `RayHit`, `Enemy`)
-- `New Proje/StealthVisionSystem/DataStructures.cs`: `DynamicArray<T>`, `MinHeap<T>`
-- `New Proje/StealthVisionSystem/SpatialAlgorithms.cs`: BSP, LOS, raycasting, collision, geometri
-- `New Proje/StealthVisionSystem/Pathfinding.cs`: `WaypointGraph`, `AStarPathfinder`
-- `New Proje/StealthVisionSystem/GameForm.cs`: Arayüz, çizim, oyun döngüsü ve AI modları
+Proje WinForms tabanlı 2D arayüz ile çalışmaktadır:
 
-## 🚀 Kurulum ve Çalıştırma
+- Kuşbakışı harita çizimi (duvarlar yuvarlak uçlu `LineCap.Round`)
+- Düşman görüş konisi (raycasting ile oluşturulan dolgu poligonu, duvar arkası karanlık)
+- Oyuncu yön göstergesi (hareket yönüne dönen ok)
+- Düşman FOV'una girildiğinde kırmızı halo uyarısı
+- Çıkış noktası animasyonlu nabız + EXIT etiketi
+- HUD: seviye bilgisi + F1 kısayol ipucu
+- Oyun sonu overlay (kazanma / kaybetme / seviye geçişi)
 
-### 🛠️ Gereksinimler
+---
 
-- .NET 9 SDK
-- Visual Studio 2022 (tercihen .NET desktop development workload ile)
+## Seviye Sistemi
 
-### 💻 Terminal ile
+| Seviye | Ad | Düşman | Düşman Hızı | FOV Açısı | FOV Menzili |
+|---|---|---|---|---|---|
+| 1 | Koridor Labirenti | 2 | 2.3 px/kare | ±28° | 240 px |
+| 2 | Çapraz Odalar | 3 | 2.8 px/kare | ±33° | 265 px |
+| 3 | Kale | 4 | 3.3 px/kare | ±38° | 290 px |
 
-bash
-- `cd "data-structures-SVS-master"`
-- `dotnet restore`
-- `dotnet run`
+---
 
-### 🛠️ Visual Studio 2022 ile
+## Oyun Davranışı
 
-- `StealthVisionSystem.csproj` dosyasını aç.
+- Oyuncu `W` `A` `S` `D` ile hareket eder
+- Oyuncu duvarlardan geçemez (daire tabanlı çarpışma + sliding)
+- Düşmanlar sabit waypoint rotaları üzerinde A* ile devriye atar
+- Her düşmanın kendine özgü rotası vardır; rotalar çakışmaz
+- Oyuncu bir düşmanın FOV poligonuna girerse yakalanır
+- Oyuncu çıkış noktasına ulaşırsa seviye tamamlanır, 3. seviyeden sonra oyun kazanılır
+- `F1` A* yol çizgilerini göster / gizle
+- `R` oyunu mevcut seviyeden sıfırlar
 
-- StealthVisionSystem için Set as Startup Project yap.
+---
 
-- Ctrl + F5 ile çalıştır.
+## Dosya Yapısı
 
-## ⏳ Zaman Karmaşıklığı Özeti
+```
+DataStructures_SVS/
+├── Program.cs               — Giriş noktası (Main)
+├── CoreTypes.cs             — Vector2D, Segment
+├── DataStructures.cs        — DynamicArray<T>, MinHeap<T>, BspTree, BspNode
+├── Geometry.cs              — BSP sorgulama, LOS, raycasting, FOV, çarpışma
+├── Pathfinding.cs           — WaypointGraph, GraphEdge, AStarPathfinder
+├── PatrolSystem.cs          — LevelNavigationGraph, PatrolSystem (8-yön sliding)
+├── Levels.cs                — LevelDefinition, EnemySpawn, LevelManager (3 seviye)
+├── GameForm.cs              — Oyun döngüsü, AI mantığı, render, input
+├── GameForm.Designer.cs     — WinForms tasarımcı kodu
+└── README.md                — Bu dosya
+```
 
-- **BSP Query:** Ortalama durumda tüm duvarları gezmeden aday duvar listesini çıkarır.
+---
 
-- **Raycasting:** R ışın için yaklaşık O(R * C) (C: BSP'den gelen aday duvar sayısı).
+## Kurulum ve Çalıştırma
 
-- **A*:** Graph üzerinde standart olarak O((V + E) log V) (heap kullanımına bağlı).
+### Gereksinimler
 
-- **Collision:** Segment kesişim kontrolleri ile aday duvarlar üzerinden çalışır.
+- Windows 10 / 11
+- .NET Framework 3.5 veya üstü (Windows ile birlikte gelir)
+- Visual Studio 2022 (isteğe bağlı; MSBuild tek başına yeterlidir)
 
-## 👥 Ekip Bilgileri
+### Visual Studio 2022 ile
 
-- **Oğuz Eren - 032290038**
+```
+1. DataStructures_SVS.csproj dosyasını aç
+2. F5 (Debug) veya Ctrl+F5 (çalıştır) ile başlat
+```
 
-- **Zeynep Sude Kalkan - 032290056**
+### MSBuild CLI ile
 
-- **Barış Kabacaoğlu - 032290027**
+```bat
+"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" ^
+    DataStructures_SVS.csproj /p:Configuration=Release
+bin\Release\DataStructures_SVS.exe
+```
 
-- **Berat Çakır - 032290054**
+> **Not:** Proje .NET Framework 3.5 / WinForms tabanlıdır. WinForms uygulamaları
+> Windows GDI+ sürücüsüne bağımlı olduğundan Linux Docker konteynerlerinde çalışmaz.
 
-## 🛠️ Ekip İçindeki Modül Dağılımı
+---
 
-- **Oğuz Eren:** GameForm.cs (arayüz, oyun döngüsü, panel)
+## Zaman Karmaşıklığı Özeti
 
-- **Zeynep Sude Kalkan:** SpatialAlgorithms.cs (BSP, LOS, raycasting, çarpışma)
+| Yapı / Algoritma | İşlem | Karmaşıklık |
+|---|---|---|
+| `DynamicArray<T>` | Add (amortize) / Get | O(1) |
+| `DynamicArray<T>` | RemoveAt | O(n) |
+| `MinHeap<T>` | Push / Pop | O(log n) |
+| `BspTree` | Build | O(n log n) ort. |
+| `BspTree` | LOS / kesişim sorgusu | O(log n) ort. |
+| `WaypointGraph` | BuildEdges | O(n² · log n) |
+| `A*` | FindPath | O((V+E) log V) |
+| Raycasting (68 ışın) | ComputeFieldOfView | O(R · log n) |
+| Çarpışma | CircleHitsWalls | O(n) |
 
-- **Barış Kabacaoğlu:** Pathfinding.cs (graph ve A* pathfinding)
+---
 
-- **Berat Çakır:** Program.cs, CoreTypes.cs, DataStructures.cs (çekirdek ve veri yapıları)
+## Ekip ve Modül Dağılımı
+
+| Ad Soyad | No | Dosyalar | Görev |
+|---|---|---|---|
+| Oguz Eren | 032290038 | `GameForm.cs`, `GameForm.Designer.cs` | UI, render, input, oyun döngüsü, HUD, overlay |
+| Zeynep Sude Kalkan | 032290056 | `Geometry.cs`, `DataStructures.cs` (BspTree) | BSP, LOS, raycasting, FOV, çarpışma geometrisi |
+| Baris Kabacaoglu | 032290027 | `Pathfinding.cs`, `PatrolSystem.cs` | WaypointGraph, A*, LevelNavigationGraph, devriye |
+| Berat CAKIR | 032290054 | `Program.cs`, `CoreTypes.cs`, `DataStructures.cs` (DynArray/MinHeap), `Levels.cs`, `README.md` | Çekirdek tipler, veri yapıları, seviye tanımları, dokümantasyon |
+
+---
+
+## Git İş Akışı
+
+```
+Feature Branch → Commit → Pull Request → Review → Merge (main)
+```
+
+| Üye | Branch |
+|---|---|
+| Oguz Eren | `feature/oguz-ui` |
+| Zeynep Sude Kalkan | `feature/zeynep-bsp` |
+| Baris Kabacaoglu | `feature/baris-astar` |
+| Berat CAKIR | `feature/berat-core` |
+
+- `main` dalına doğrudan kod gönderilmez
+- PR açıklamasında: ad soyad, öğrenci no, değiştirilen dosyalar, yapılan değişiklik
+- Merge sonrası branch `main` ile güncellenir: `git merge main`

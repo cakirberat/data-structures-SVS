@@ -1,0 +1,8 @@
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\bin\Debug\DataStructures_SVS.exe
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\bin\Debug\DataStructures_SVS.pdb
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\obj\Debug\DataStructures_SVS.csproj.AssemblyReference.cache
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\obj\Debug\DataStructures_SVS.Properties.Resources.resources
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\obj\Debug\DataStructures_SVS.csproj.GenerateResource.cache
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\obj\Debug\DataStructures_SVS.csproj.CoreCompileInputs.cache
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\obj\Debug\DataStructures_SVS.exe
+C:\Users\brt_c\OneDrive\Masaüstü\DataStructures_SVS\obj\Debug\DataStructures_SVS.pdb
