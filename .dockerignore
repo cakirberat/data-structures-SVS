@@ -1,0 +1,42 @@
+# ============================================================
+# .dockerignore — Docker build bağlamından dışlanan dosyalar
+#
+# Bu dosyadaki kalıplar build context'e gönderilmez;
+# bu sayede Docker imaj boyutu küçülür, build hızlanır.
+# ============================================================
+
+# Derleme çıktıları (build aşamasında üretilir, önceden gerekmiyor)
+bin/
+obj/
+
+# Visual Studio kullanıcı dosyaları
+*.user
+*.suo
+.vs/
+
+# Geçici ve sistem dosyaları
+Thumbs.db
+Desktop.ini
+*.tmp
+*.bak
+*.log
+
+# Git meta verileri (imaj içinde gerekmiyor)
+.git/
+.gitignore
+.gitattributes
+
+# Dokümantasyon (imaj içinde gereksiz)
+README.md
+RAPOR.md
+RAPOR.docx
+*.pdf
+
+# Test ve geçici betikler
+create_rapor.py
+*.ps1
+
+# Docker konfigürasyon dosyalarının kendisi (döngüsel eklemeyi önler)
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,63 @@
+# ============================================================
+# DataStructures_SVS — docker-compose.yml
+#
+# Bu proje tek bir masaüstü uygulamasından oluşmaktadır.
+# Servislere ayrılmış web mimarilerinin aksine tüm sistem
+# (oyun motoru, AI simülasyonu, render) tek bir süreç içinde
+# çalışır; dolayısıyla tek bir servis tanımlanmıştır.
+#
+# KULLANIM:
+#   docker-compose up --build          → Derle ve çalıştır
+#   docker-compose build               → Yalnızca derle
+#   docker-compose down                → Durdur ve temizle
+#
+# GEREKSİNİM: Docker Desktop, Windows Containers modunda
+#             çalışıyor olmalıdır.
+# ============================================================
+
+version: "3.8"
+
+services:
+
+  # ──────────────────────────────────────────────────────────
+  # game — Oyun uygulaması
+  # WinForms tabanlı .NET Framework 3.5 masaüstü uygulaması.
+  # BSP görüş sistemi, A* pathfinding ve devriye AI sistemi
+  # bu servis içinde çalışır.
+  # ──────────────────────────────────────────────────────────
+  game:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: datastructures-svs:latest
+    container_name: svs_game
+
+    # Windows Container — platforma kilitlenir
+    platform: windows/amd64
+
+    # Ortam değişkenleri (ileride genişletme için)
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+
+    # Yeniden başlatma politikası: oyun kapanırsa container durur
+    restart: "no"
+
+    # Çıktılar için log sınırlaması
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Gelecekte build artefaktlarını host'a almak için:
+    # volumes:
+    #   - ./output:/app/output
+
+# ──────────────────────────────────────────────────────────────
+# Gelecekte servislere bölünmüş mimari için örnek taslak:
+# (Bu proje şu an bu yapıyı kullanmamaktadır)
+#
+#  backend:        → Oyun logic/AI REST API'ye taşındığında
+#  frontend:       → Tarayıcı tabanlı render eklendiğinde
+#  ai-service:     → FOV/A* bağımsız microservis olduğunda
+# ──────────────────────────────────────────────────────────────
