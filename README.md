@@ -422,20 +422,3 @@ Her ekip üyesi kendi özellik branch'inde çalışır ve işi bittiğinde Pull 
 git checkout feature/oguz-ui
 git merge main
 ```
-
----
-
-## Değerlendirme Kriterleri Karşılama Durumu
-
-| Kriter | Durum |
-|---|---|
-| Sıfırdan yazılmış temel veri yapıları (BSP, MinHeap, DynamicArray, WaypointGraph) | ✅ Tamamlandı |
-| Algoritmalar (LOS, FOV/Raycasting, A*, Swept-circle çarpışma) | ✅ Tamamlandı |
-| Birden fazla seviye ve artan zorluk | ✅ 3 seviye |
-| Görüş alanı duvarlarla kısıtlanıyor | ✅ Raycasting poligonu |
-| Düşmanlar oyuncuyu kovalamıyor, devriye atıyor | ✅ Waypoint tabanlı patrol |
-| Engellerin içinden geçilemiyor | ✅ Swept-circle + sliding |
-| GitHub branch / PR iş akışı | ✅ Her üye kendi branch'inde |
-| Proje raporu (UML + Big-O + AI özeti) | ✅ RAPOR.docx |
-| README | ✅ Bu dosya |
-| Demo videosu | 🔲 Hazırlanacak (≤10 dakika) |
