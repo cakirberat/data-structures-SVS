@@ -1,75 +1,58 @@
-using System;
+﻿using System;
+using System.Drawing;
 
-namespace StealthVisionSystem;
-
-public readonly struct Vector2
+namespace DataStructures_SVS
 {
-    public double X { get; }
-    public double Y { get; }
-
-    public Vector2(double x, double y)
+    // 2 boyutlu vektor / nokta. Konum, yon ve geometrik hesaplarda kullanilir.
+    public class Vector2D
     {
-        X = x;
-        Y = y;
+        public float X { get; set; }
+        public float Y { get; set; }
+
+        public Vector2D(float x, float y)
+        {
+            X = x;
+            Y = y;
+        }
+
+        public PointF ToPointF() => new PointF(X, Y);
+
+        public Vector2D Clone() => new Vector2D(X, Y);
+
+        public float Length => (float)Math.Sqrt(X * X + Y * Y);
+
+        // İki nokta arası Öklid mesafesi
+        public static float Distance(Vector2D v1, Vector2D v2)
+        {
+            float dx = v1.X - v2.X;
+            float dy = v1.Y - v2.Y;
+            return (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        public static float DistanceSquared(Vector2D v1, Vector2D v2)
+        {
+            float dx = v1.X - v2.X;
+            float dy = v1.Y - v2.Y;
+            return dx * dx + dy * dy;
+        }
     }
 
-    public static Vector2 operator +(Vector2 a, Vector2 b) => new(a.X + b.X, a.Y + b.Y);
-    public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.X - b.X, a.Y - b.Y);
-    public static Vector2 operator *(Vector2 a, double t) => new(a.X * t, a.Y * t);
-
-    public double Length() => Math.Sqrt(X * X + Y * Y);
-
-    public Vector2 Normalize()
+    // Bir duvar parçası (iki nokta arasındaki doğru segmenti)
+    public class Segment
     {
-        double len = Length();
-        return len < 1e-9 ? new Vector2(0, 0) : new Vector2(X / len, Y / len);
-    }
+        public Vector2D Start { get; set; }
+        public Vector2D End { get; set; }
 
-    public static double Dot(Vector2 a, Vector2 b) => a.X * b.X + a.Y * b.Y;
-    public static double Cross(Vector2 a, Vector2 b) => a.X * b.Y - a.Y * b.X;
+        public Segment(Vector2D start, Vector2D end)
+        {
+            Start = start;
+            End = end;
+        }
 
-    public override string ToString() => $"({X:0.00}, {Y:0.00})";
-}
-
-public readonly struct WallSegment
-{
-    public Vector2 A { get; }
-    public Vector2 B { get; }
-    public Vector2 MidPoint => new((A.X + B.X) / 2.0, (A.Y + B.Y) / 2.0);
-
-    public WallSegment(Vector2 a, Vector2 b)
-    {
-        A = a;
-        B = b;
-    }
-}
-
-public readonly struct RayHit
-{
-    public bool Intersects { get; }
-    public double Distance { get; }
-    public Vector2 Point { get; }
-
-    public RayHit(bool intersects, double distance, Vector2 point)
-    {
-        Intersects = intersects;
-        Distance = distance;
-        Point = point;
-    }
-}
-
-public sealed class Enemy
-{
-    public Vector2 Position { get; private set; }
-    public double DirectionRadians { get; private set; }
-    public double FovRadians { get; }
-    public double ViewDistance { get; }
-
-    public Enemy(Vector2 position, double directionRadians, double fovRadians, double viewDistance)
-    {
-        Position = position;
-        DirectionRadians = directionRadians;
-        FovRadians = fovRadians;
-        ViewDistance = viewDistance;
+        public Segment(float x1, float y1, float x2, float y2)
+        {
+            Start = new Vector2D(x1, y1);
+            End = new Vector2D(x2, y2);
+        }
     }
 }
