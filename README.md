@@ -2,7 +2,7 @@
 
 > **Bursa Uludağ Üniversitesi — Bilgisayar Mühendisliği**  
 > Veri Yapıları Dersi Bitirme Projesi · 2025–2026 Bahar · Grup 6 · Konu 6  
-> GitHub: <https://github.com/cakirberat/data-structures-SVS>
+> GitHub: <https://github.com/cakirberat/data-structures-SVS>  
 > Rapor: <https://drive.google.com/drive/folders/1IcNR6AW7b7o_IT7-qJa0x9FfDj5ftFC6?usp=drive_link>
 
 ---
